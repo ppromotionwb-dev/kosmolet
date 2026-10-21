@@ -1,0 +1,48 @@
+/* Владелец: claude-bridge. Раздел настроек «Claude». */
+.kcs-status { font-size: var(--k-fs-sm); color: var(--k-text-dim); display: inline-flex; align-items: center; gap: 6px; }
+.kcs-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--k-text-faint); flex: 0 0 auto; }
+.kcs-status[data-tone="ok"]::before { background: var(--k-ok); }
+.kcs-status[data-tone="danger"] { color: var(--k-danger); }
+.kcs-status[data-tone="danger"]::before { background: var(--k-danger); }
+.kcs-flag { color: var(--k-warn); }
+
+.kcs-token { width: 220px; }
+.kcs-inline { display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; }
+.kcs-grow .ks-text { flex: 1; width: auto; min-width: 0; }
+.kcs-path {
+  flex: 1; min-width: 0;
+  padding: 6px 9px; border-radius: var(--k-radius-sm);
+  background: var(--k-bg-sunken); border: 1px solid var(--k-border);
+  color: var(--k-text-dim); font-size: var(--k-fs-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  user-select: all;
+}
+.kcs-cmd-wrap { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.kcs-cmd {
+  display: block; padding: 8px 10px; border-radius: var(--k-radius-sm);
+  background: var(--k-bg-sunken); border: 1px solid var(--k-border);
+  color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.45;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+.kcs-cmd-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.kcs-out {
+  margin: 0; padding: 8px 10px; max-height: 160px; overflow: auto;
+  border-radius: var(--k-radius-sm); background: var(--k-bg-sunken); border: 1px solid var(--k-border);
+  font: var(--k-fs-sm)/1.45 var(--k-mono); color: var(--k-text-dim);
+  white-space: pre-wrap; word-break: break-word; user-select: text;
+}
+.kcs-out[data-tone="ok"] { border-color: color-mix(in srgb, var(--k-ok) 40%, transparent); }
+.kcs-out[data-tone="danger"] { border-color: color-mix(in srgb, var(--k-danger) 45%, transparent); color: var(--k-text); }
+
+.kcs-warn-holder:has(> .kcs-warn[hidden]) { display: none; }
+.kcs-warn {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--k-radius);
+  background: var(--k-warn-soft); color: var(--k-text);
+  font-size: var(--k-fs-sm); line-height: 1.45;
+}
+.kcs-warn > .k-ic { color: var(--k-warn); flex: 0 0 auto; margin-top: 1px; }
+.kcs-warn-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+.kcs-keys { display: flex; flex-direction: column; gap: 6px; color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kcs-keys .k-kbd { margin-right: 4px; }

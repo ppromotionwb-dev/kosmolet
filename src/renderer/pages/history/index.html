@@ -7,16 +7,30 @@
   <link rel="stylesheet" href="/shared/tokens.css">
   <link rel="stylesheet" href="/shared/base.css">
   <link rel="stylesheet" href="/shared/page.css">
+  <link rel="stylesheet" href="history.css">
   <script src="/shared/theme.js"></script>
   <script src="/shared/icons.js" defer></script>
   <script src="/shared/kui.js" defer></script>
   <script src="history.js" defer></script>
 </head>
 <body>
-  <!-- Владелец: ux-chrome. Заглушка core — фича заменит страницу. -->
+  <!-- Владелец: ux-chrome. -->
   <div class="kp-page">
-    <header class="kp-head"><div class="kp-title" id="kp-title"></div><div class="kp-tools"></div></header>
-    <main class="kp-body" id="kp-body"></main>
+    <header class="kp-head">
+      <div class="kp-title" id="kp-title"></div>
+      <div class="kp-tools">
+        <label class="k-search">
+          <span id="hs-search-icon"></span>
+          <input id="hs-q" class="k-input" type="search" placeholder="Поиск в истории" spellcheck="false" autocomplete="off" aria-label="Поиск в истории">
+        </label>
+        <button id="hs-clear" class="k-btn k-btn-danger" type="button">Очистить историю</button>
+      </div>
+    </header>
+    <main class="kp-body" id="kp-body">
+      <div id="hs-summary" class="hs-summary" hidden></div>
+      <div id="hs-list"></div>
+      <div id="hs-more" class="hs-more"></div>
+    </main>
   </div>
 </body>
 </html>

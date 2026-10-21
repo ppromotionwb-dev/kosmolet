@@ -1,0 +1,16 @@
+/* Владелец: devtools. Сцена эмуляции устройства в chrome и значок в адресной строке. */
+#kdt-stage { position: fixed; z-index: 0; pointer-events: none; display: none; }
+#kdt-stage.on { display: block; }
+#kdt-stage .kdt-frame {
+  position: absolute; inset: -9px; border-radius: 16px;
+  background: var(--k-bg-sunken); border: 1px solid var(--k-border-strong);
+  box-shadow: var(--k-shadow);
+}
+#kdt-stage .kdt-cap {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: -36px;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  color: var(--k-text-dim); font-size: var(--k-fs-sm); font-variant-numeric: tabular-nums;
+}
+#kdt-stage .kdt-cap b { color: var(--k-text); font-weight: 600; }
+#kdt-stage .kdt-cap .k-ic { color: var(--k-text-faint); }
+:root.fullscreen #kdt-stage { display: none; }

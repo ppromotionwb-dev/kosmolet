@@ -40,22 +40,24 @@
   --k-on-accent: #ffffff;
 }
 
-/* --- цвета: тема cosmos (по умолчанию) ---
+/* --- цвета: тема cosmos (по умолчанию) — глубокий синий графит (не чёрный), фиолетовый акцент ---
+   Пресеты тем — владелец фича themes. Цвета полосы вкладок (--k-bg-sunken) и фона (--k-bg) продублированы
+   в main/windows.js (TITLEBAR_COLORS, WINDOW_BG) — менять вместе.
    [data-theme-preview="<id>"] — та же палитра на любом элементе (превью тем в настройках):
    все превью сначала получают cosmos, затем свой пресет (он ниже по файлу). */
 :root, [data-theme-preview] {
   color-scheme: dark;
-  --k-bg-sunken: #0b0d13;
-  --k-bg: #12141c;
-  --k-bg-elev: #1a1d28;
-  --k-surface: #1e2130;
-  --k-surface-hover: #262a3b;
-  --k-surface-active: #2e3346;
-  --k-border: rgba(160, 172, 230, 0.09);
-  --k-border-strong: rgba(160, 172, 230, 0.18);
-  --k-text: #e5e7f0;
-  --k-text-dim: #a0a5ba;
-  --k-text-faint: #686e86;
+  --k-bg-sunken: #0f121c;
+  --k-bg: #151926;
+  --k-bg-elev: #1b2031;
+  --k-surface: #20263a;
+  --k-surface-hover: #283047;
+  --k-surface-active: #303954;
+  --k-border: rgba(150, 165, 235, 0.10);
+  --k-border-strong: rgba(150, 165, 235, 0.19);
+  --k-text: #e4e7f2;
+  --k-text-dim: #a2a9c4;
+  --k-text-faint: #6a7290;
   --k-ok: #43c98a;
   --k-warn: #e9b04f;
   --k-danger: #ef6b6b;
@@ -125,32 +127,36 @@
   --k-selection: color-mix(in srgb, var(--k-accent) 24%, transparent);
 }
 
-/* terminal — почти чёрный, зеленоватый текст, моноширинный интерфейс */
+/* terminal — чёрный, зелёный текст и акцент, моноширинный интерфейс */
 :root[data-theme="terminal"], [data-theme-preview="terminal"] {
   --k-font: var(--k-mono);
-  --k-bg-sunken: #040705;
-  --k-bg: #090e0b;
-  --k-bg-elev: #0e1511;
-  --k-surface: #121b16;
-  --k-surface-hover: #19251e;
-  --k-surface-active: #203026;
-  --k-border: rgba(120, 255, 170, 0.09);
-  --k-border-strong: rgba(120, 255, 170, 0.18);
-  --k-text: #cfe9d6;
-  --k-text-dim: #86a891;
-  --k-text-faint: #56705f;
+  --k-bg-sunken: #000000;
+  --k-bg: #050806;
+  --k-bg-elev: #0a0f0c;
+  --k-surface: #0f1612;
+  --k-surface-hover: #16211a;
+  --k-surface-active: #1d2c23;
+  --k-border: rgba(110, 255, 160, 0.10);
+  --k-border-strong: rgba(110, 255, 160, 0.20);
+  --k-text: #c8ead2;
+  --k-text-dim: #7fa58b;
+  --k-text-faint: #50705b;
   --k-ok: #5be08a;
-  --k-scrollbar: rgba(120, 255, 170, 0.14);
-  --k-scrollbar-hover: rgba(120, 255, 170, 0.26);
-  --k-backdrop: rgba(0, 0, 0, 0.6);
-  --k-radius: 6px;
-  --k-radius-sm: 4px;
-  --k-radius-lg: 8px;
+  --k-warn: #e6c25a;
+  --k-scrollbar: rgba(110, 255, 160, 0.14);
+  --k-scrollbar-hover: rgba(110, 255, 160, 0.26);
+  --k-backdrop: rgba(0, 0, 0, 0.66);
+  --k-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(110, 255, 160, 0.06);
+  --k-shadow-pop: 0 3px 6px rgba(0, 0, 0, 0.6), 0 0 1px rgba(110, 255, 160, 0.3);
+  --k-accent-text: color-mix(in oklab, var(--k-accent), white 18%);
+  --k-radius: 4px;
+  --k-radius-sm: 3px;
+  --k-radius-lg: 6px;
 }
 
 /* custom — основа задаётся инлайном (--k-bg, --k-surface, --k-text из settings.ui.custom),
    остальное выводится из них. data-scheme ставит theme.js по яркости фона. */
-:root[data-theme="custom"] {
+:root[data-theme="custom"], [data-theme-preview="custom"] {
   --k-bg-sunken: color-mix(in oklab, var(--k-bg), black 30%);
   --k-bg-elev: color-mix(in oklab, var(--k-bg), var(--k-surface) 50%);
   --k-surface-hover: color-mix(in oklab, var(--k-surface), var(--k-text) 7%);
@@ -162,7 +168,7 @@
   --k-scrollbar: color-mix(in srgb, var(--k-text) 16%, transparent);
   --k-scrollbar-hover: color-mix(in srgb, var(--k-text) 28%, transparent);
 }
-:root[data-theme="custom"][data-scheme="light"] {
+:root[data-theme="custom"][data-scheme="light"], [data-theme-preview="custom"][data-scheme="light"] {
   color-scheme: light;
   --k-bg-sunken: color-mix(in oklab, var(--k-bg), black 8%);
   --k-shadow: 0 12px 30px rgba(20, 26, 46, 0.14), 0 2px 8px rgba(20, 26, 46, 0.08);

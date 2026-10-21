@@ -13,14 +13,24 @@
   <script src="newtab.js" defer></script>
 </head>
 <body>
-  <!-- Владелец: ux-chrome. Заглушка core — фича заменит страницу. -->
+  <!-- Владелец: ux-chrome. Поле поиска передаёт ввод в адресную строку (как в Chrome), плитки — закладки и частые сайты. -->
   <main class="nt">
-    <div class="nt-logo" id="nt-logo"></div>
-    <form class="nt-search" id="nt-form" autocomplete="off">
-      <span class="nt-search-icon" id="nt-icon"></span>
-      <input id="nt-q" type="text" spellcheck="false" placeholder="Поиск или адрес" aria-label="Поиск или адрес">
-    </form>
-    <p class="nt-hint">Бэнги: <span class="k-kbd">wb</span> <span class="k-kbd">oz</span> <span class="k-kbd">ym</span> <span class="k-kbd">gh</span> и пробел — поиск по сайту</p>
+    <div class="nt-hero">
+      <div class="nt-logo" id="nt-logo"></div>
+      <button class="nt-search" id="nt-search" type="button" aria-label="Поиск или адрес">
+        <span class="nt-search-icon" id="nt-icon"></span>
+        <span class="nt-placeholder" id="nt-placeholder">Поиск или адрес</span>
+      </button>
+      <div class="nt-chips" id="nt-chips" aria-label="Бэнги"></div>
+    </div>
+    <section class="nt-section" id="nt-bar" hidden>
+      <h2 class="k-label">Закладки</h2>
+      <div class="nt-grid"></div>
+    </section>
+    <section class="nt-section" id="nt-freq" hidden>
+      <h2 class="k-label">Часто посещаемые</h2>
+      <div class="nt-grid"></div>
+    </section>
   </main>
 </body>
 </html>

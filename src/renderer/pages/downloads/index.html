@@ -7,16 +7,30 @@
   <link rel="stylesheet" href="/shared/tokens.css">
   <link rel="stylesheet" href="/shared/base.css">
   <link rel="stylesheet" href="/shared/page.css">
+  <link rel="stylesheet" href="downloads.css">
   <script src="/shared/theme.js"></script>
   <script src="/shared/icons.js" defer></script>
   <script src="/shared/kui.js" defer></script>
   <script src="downloads.js" defer></script>
 </head>
 <body>
-  <!-- Владелец: ux-chrome. Заглушка core — фича заменит страницу. -->
+  <!-- Владелец: ux-chrome. -->
   <div class="kp-page">
-    <header class="kp-head"><div class="kp-title" id="kp-title"></div><div class="kp-tools"></div></header>
-    <main class="kp-body" id="kp-body"></main>
+    <header class="kp-head">
+      <div class="kp-title" id="kp-title"></div>
+      <div class="kp-tools">
+        <label class="k-search">
+          <span id="dl-search-icon"></span>
+          <input id="dl-q" class="k-input" type="search" placeholder="Поиск по загрузкам" spellcheck="false" autocomplete="off" aria-label="Поиск по загрузкам">
+        </label>
+        <button id="dl-open-dir" class="k-btn" type="button"></button>
+        <button id="dl-clear" class="k-btn k-btn-ghost" type="button">Очистить список</button>
+      </div>
+    </header>
+    <main class="kp-body" id="kp-body">
+      <section class="dl-prefs k-card" id="dl-prefs"></section>
+      <div id="dl-list"></div>
+    </main>
   </div>
 </body>
 </html>

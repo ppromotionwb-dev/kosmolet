@@ -1,0 +1,116 @@
+/* Владелец: devtools. Общие стили инструментов «DevTools», «Сеть и API», «Хранилище», «Устройство». */
+
+:root.kd-resizing-x, :root.kd-resizing-x * { cursor: ew-resize !important; user-select: none !important; }
+:root.kd-resizing-y, :root.kd-resizing-y * { cursor: ns-resize !important; user-select: none !important; }
+
+/* ---------- меню ---------- */
+.kd-menu {
+  position: fixed; z-index: 1000;
+  min-width: 190px; max-width: min(340px, calc(100vw - 12px)); max-height: calc(100vh - 12px); overflow: auto;
+  padding: 4px;
+  background: var(--k-bg-elev);
+  border: 1px solid var(--k-border-strong);
+  border-radius: var(--k-radius-lg);
+  box-shadow: var(--k-shadow);
+  animation: kd-pop var(--k-dur) var(--k-ease);
+}
+@keyframes kd-pop { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+.kd-menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  height: 28px; padding: 0 8px;
+  border-radius: var(--k-radius-sm);
+  color: var(--k-text); text-align: left; white-space: nowrap;
+}
+.kd-menu-item .k-ic { color: var(--k-text-dim); }
+.kd-menu-item:hover, .kd-menu-item:focus-visible { background: var(--k-surface-hover); outline: none; }
+.kd-menu-item:disabled { opacity: 0.4; pointer-events: none; }
+.kd-menu-item.danger, .kd-menu-item.danger .k-ic { color: var(--k-danger); }
+.kd-menu-noicon { width: 14px; flex-shrink: 0; }
+.kd-menu-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.kd-menu-hint { color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.kd-menu-sep { height: 1px; margin: 4px 6px; background: var(--k-border); }
+.kd-menu-label { padding: 6px 8px 2px; font-size: var(--k-fs-xs); font-weight: 600; color: var(--k-text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ---------- секции и «ключ — значение» ---------- */
+.kd-sec { border-bottom: 1px solid var(--k-border); }
+.kd-sec-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  height: 30px; padding: 0 10px;
+  color: var(--k-text); font-weight: 600; font-size: var(--k-fs-sm);
+  text-align: left;
+}
+.kd-sec-head:hover { background: var(--k-surface-hover); }
+.kd-sec-head > .k-ic { color: var(--k-text-faint); transition: transform var(--k-dur-fast) var(--k-ease); }
+.kd-sec.collapsed .kd-sec-head > .k-ic { transform: rotate(-90deg); }
+.kd-sec-meta { color: var(--k-text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+.kd-sec-actions { margin-left: auto; display: flex; gap: 2px; }
+.kd-sec-body { padding: 0 10px 10px; }
+
+.kd-kv { display: grid; grid-template-columns: minmax(90px, max-content) minmax(0, 1fr); column-gap: 12px; row-gap: 1px; }
+.kd-kv.mono { font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1.5px); }
+.kd-kv-k { color: var(--k-text-dim); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+.kd-kv-v { color: var(--k-text); word-break: break-all; white-space: pre-wrap; padding: 2px 4px; margin: 0 -4px; border-radius: 4px; user-select: text; cursor: text; }
+.kd-kv-v:hover { background: var(--k-surface-hover); }
+.kd-kv-empty { color: var(--k-text-faint); font-size: var(--k-fs-sm); padding: 4px 0; }
+
+/* ---------- дерево JSON ---------- */
+.jt {
+  font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1.5px); line-height: 20px;
+  user-select: text; outline: none; padding: 4px 0;
+}
+.jt-row {
+  display: flex; align-items: center; min-height: 20px; white-space: nowrap;
+  padding-right: 8px; border-radius: 3px; cursor: default;
+}
+.jt-row:hover { background: var(--k-surface-hover); }
+.jt-row.sel { background: var(--k-accent-faint); box-shadow: inset 2px 0 0 var(--k-accent); }
+.jt-row.hit { background: color-mix(in srgb, var(--k-warn) 22%, transparent); }
+.jt-tw { width: 14px; height: 14px; flex-shrink: 0; display: grid; place-items: center; color: var(--k-text-faint); margin-right: 2px; }
+.jt-tw .k-ic { transition: transform var(--k-dur-fast) var(--k-ease); }
+.jt-node.open > .jt-row > .jt-tw .k-ic { transform: rotate(90deg); }
+.jt-tw.leaf { visibility: hidden; }
+.jt-k { color: var(--k-accent-text); flex-shrink: 0; }
+.jt-k.idx { color: var(--k-text-faint); }
+.jt-colon { color: var(--k-text-faint); white-space: pre; }
+.jt-pv { color: var(--k-text-faint); overflow: hidden; text-overflow: ellipsis; }
+.jt-v { overflow: hidden; text-overflow: ellipsis; }
+.jt-str { color: var(--k-ok); }
+.jt-number { color: var(--k-warn); }
+.jt-boolean { color: var(--k-accent-text); }
+.jt-null, .jt-undefined { color: var(--k-text-faint); font-style: italic; }
+.jt-kids[hidden] { display: none; }
+
+/* ---------- сегменты, мелочи ---------- */
+.kd-seg > button { padding: 0 9px; font-size: var(--k-fs-sm); }
+.kd-seg.sm > button { height: calc(var(--k-ctl-h-sm) - 4px); padding: 0 7px; font-size: var(--k-fs-xs); }
+.kd-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid var(--k-border); background: transparent;
+  color: var(--k-text-dim); font-size: var(--k-fs-xs); font-weight: 500; white-space: nowrap;
+  transition: background-color var(--k-dur-fast) var(--k-ease), color var(--k-dur-fast) var(--k-ease), border-color var(--k-dur-fast) var(--k-ease);
+}
+.kd-pill:hover { color: var(--k-text); border-color: var(--k-border-strong); }
+.kd-pill.on { background: var(--k-accent-soft); border-color: transparent; color: var(--k-accent-text); }
+.kd-pill .kd-pill-n { color: var(--k-text-faint); font-variant-numeric: tabular-nums; }
+.kd-pill.on .kd-pill-n { color: inherit; opacity: 0.75; }
+
+.kd-note {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 8px 10px; border-radius: var(--k-radius);
+  background: var(--k-surface); color: var(--k-text-dim);
+  font-size: var(--k-fs-sm); line-height: 1.4;
+}
+.kd-note > .k-ic { color: var(--k-text-faint); margin-top: 1px; }
+.kd-note.warn { background: var(--k-warn-soft); color: var(--k-text); }
+.kd-note.warn > .k-ic { color: var(--k-warn); }
+.kd-note .k-btn { margin-left: auto; flex-shrink: 0; }
+
+.kd-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+
+/* статусы */
+.kd-st-ok { color: var(--k-ok); }
+.kd-st-redir { color: var(--k-accent-text); }
+.kd-st-warn { color: var(--k-warn); }
+.kd-st-err { color: var(--k-danger); }
+.kd-st-pend { color: var(--k-text-faint); }

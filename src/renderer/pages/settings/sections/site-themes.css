@@ -1,0 +1,85 @@
+/* Владелец: themes. Разделы «Оформление» и «Темы сайтов». */
+
+/* --- темы интерфейса: 5 карточек --- */
+.kst-themes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kst-themes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .kst-themes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- свои цвета --- */
+.kst-color { display: flex; align-items: center; gap: 8px; }
+.kst-hex { width: 92px; text-transform: lowercase; }
+.kst-starts { display: flex; flex-wrap: wrap; gap: 6px; }
+.kst-start {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: var(--k-ctl-h); padding: 0 12px 0 6px;
+  border-radius: var(--k-radius-pill);
+  background: var(--sb); color: var(--st);
+  border: 1px solid var(--k-border-strong);
+  font-weight: 500;
+  transition: transform var(--k-dur-fast) var(--k-ease);
+}
+.kst-start:hover { transform: translateY(-1px); }
+.kst-start-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--ss); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st) 25%, transparent); }
+.kst-warn {
+  padding: 8px 10px; border-radius: var(--k-radius-sm);
+  background: var(--k-warn-soft); color: var(--k-warn);
+  font-size: var(--k-fs-sm);
+}
+.ks-group > .ks-free:has(> .kst-warn[hidden]) { display: none; }
+
+/* --- ползунки --- */
+.kst-range-box { display: flex; align-items: center; gap: 10px; width: 260px; }
+.kst-val { width: 42px; text-align: right; color: var(--k-text-dim); font-size: var(--k-fs-sm); font-variant-numeric: tabular-nums; }
+.kst-range {
+  -webkit-appearance: none; appearance: none;
+  flex: 1; height: 18px; margin: 0; background: transparent;
+  --p: 50%;
+}
+.kst-range::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--k-accent) var(--p), var(--k-surface-active) var(--p));
+}
+.kst-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: var(--k-text); border: 0;
+  box-shadow: 0 0 0 3px var(--k-bg-elev), var(--k-shadow-sm);
+  transition: transform var(--k-dur-fast) var(--k-ease);
+}
+.kst-range:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.kst-range:focus-visible { outline: none; }
+.kst-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--k-bg-elev), 0 0 0 5px var(--k-focus); }
+
+/* --- цвета страниц --- */
+.kst-colors { display: flex; align-items: center; gap: 8px; }
+.kst-cl { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.kst-sample {
+  padding: 12px 14px; border-radius: var(--k-radius);
+  border: 1px solid var(--k-border);
+  font-size: var(--k-fs);
+}
+.kst-sample b { font-size: var(--k-fs-lg); margin-right: 6px; }
+
+/* --- сайты --- */
+.kst-add { display: flex; gap: 8px; }
+.kst-add-in { width: 220px; }
+.kst-sites { display: flex; flex-direction: column; margin: -6px -8px; }
+.kst-sites .k-empty { padding: 20px 10px; }
+.kst-site { border-radius: var(--k-radius); }
+.kst-site + .kst-site { border-top: 1px solid var(--k-border); }
+.kst-site-main { display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 6px 8px; }
+.kst-site-text { flex: 1; min-width: 0; }
+.kst-site-key { font-weight: 500; }
+.kst-site-desc { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.kst-site-main > .k-switch { margin-left: 6px; }
+.kst-del.confirm { color: var(--k-danger); background: var(--k-danger-soft); }
+.kst-css-box { padding: 0 8px 10px; }
+.kst-css {
+  width: 100%; min-height: 140px;
+  font-family: var(--k-mono); font-size: calc(var(--k-fs) - 0.5px);
+  white-space: pre; tab-size: 2;
+}
+.kst-css-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.kst-css-state { font-size: var(--k-fs-xs); color: var(--k-text-faint); }
+.kst-css-state[data-kind="ok"] { color: var(--k-ok); }
+.kst-css-state[data-kind="error"] { color: var(--k-danger); }

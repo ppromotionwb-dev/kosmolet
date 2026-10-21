@@ -6,13 +6,14 @@ const path = require('path');
 const { EventEmitter } = require('events');
 
 // Цвета нативных кнопок окна по умолчанию (фон полосы вкладок = --k-bg-sunken, символы = --k-text).
+// Пресеты — фича themes (shared/tokens.css): менять вместе.
 const TITLEBAR_COLORS = {
-  cosmos: { color: '#0b0d13', symbolColor: '#e5e7f0' },
+  cosmos: { color: '#0f121c', symbolColor: '#e4e7f2' },
   graphite: { color: '#0f0f11', symbolColor: '#e8e8ea' },
   light: { color: '#e5e8ef', symbolColor: '#1a1c24' },
-  terminal: { color: '#040705', symbolColor: '#cfe9d6' },
+  terminal: { color: '#000000', symbolColor: '#c8ead2' },
 };
-const WINDOW_BG = { cosmos: '#12141c', graphite: '#18181b', light: '#f9fafb', terminal: '#090e0b' };
+const WINDOW_BG = { cosmos: '#151926', graphite: '#18181b', light: '#f9fafb', terminal: '#050806' };
 
 const DENSITY = { normal: { tab: 38, bar: 40 }, compact: { tab: 32, bar: 34 } };
 const PANEL_MIN = 320;

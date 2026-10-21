@@ -1,0 +1,39 @@
+/* Загрузки. Владелец: ux-chrome. */
+.dl-prefs { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 18px; }
+.dl-prefs-dir { flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.dl-prefs-dir > .k-ic { color: var(--k-text-faint); }
+.dl-prefs-path { min-width: 0; display: flex; flex-direction: column; }
+.dl-prefs-path .k-label { margin-bottom: 1px; }
+.dl-prefs-path .k-mono { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.dl-prefs-ask { display: flex; align-items: center; gap: 8px; color: var(--k-text-dim); white-space: nowrap; }
+
+.dl-day { margin-bottom: 18px; }
+.dl-day-title { position: sticky; top: 56px; z-index: 2; padding: 10px 4px 6px; background: var(--k-bg); color: var(--k-text-dim); font-weight: 600; }
+.dl-card { background: var(--k-bg-elev); border: 1px solid var(--k-border); border-radius: var(--k-radius-lg); padding: 4px; }
+.dl-row { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 8px 8px 8px 12px; border-radius: var(--k-radius); }
+.dl-row + .dl-row { margin-top: 2px; }
+.dl-row:hover { background: var(--k-surface-hover); }
+.dl-file {
+  width: 36px; height: 42px; flex-shrink: 0; display: grid; place-items: center;
+  border-radius: 7px; border: 1px solid var(--k-border);
+  background: var(--k-surface); color: var(--k-text-dim);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
+}
+.dl-file[data-kind="archive"] { background: var(--k-warn-soft); color: var(--k-warn); }
+.dl-file[data-kind="image"], .dl-file[data-kind="media"] { background: var(--k-ok-soft); color: var(--k-ok); }
+.dl-file[data-kind="doc"] { background: var(--k-danger-soft); color: var(--k-danger); }
+.dl-file[data-kind="code"], .dl-file[data-kind="app"] { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dl-name { align-self: flex-start; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; font-weight: 500; color: var(--k-text); }
+button.dl-name:hover { text-decoration: underline; color: var(--k-accent-text); }
+.dl-row.failed .dl-name, .dl-row.missing .dl-name { color: var(--k-text-dim); text-decoration: line-through; text-decoration-color: var(--k-text-faint); }
+.dl-url { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.dl-status { color: var(--k-text-faint); font-size: var(--k-fs-sm); font-variant-numeric: tabular-nums; }
+.dl-status.err { color: var(--k-danger); }
+.dl-bar { position: relative; height: 4px; max-width: 420px; border-radius: 2px; background: var(--k-surface-active); overflow: hidden; }
+.dl-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--k-accent); transition: width var(--k-dur) var(--k-ease); }
+.dl-bar.indet > span { width: 30%; animation: dl-indet 1.2s ease-in-out infinite; }
+@keyframes dl-indet { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.dl-acts { display: flex; gap: 4px; flex-shrink: 0; }
+.dl-acts .k-btn { height: var(--k-ctl-h-sm); padding: 0 8px; font-size: var(--k-fs-sm); }
+@media (prefers-reduced-motion: reduce) { .dl-bar.indet > span { animation-duration: 3s; } }

@@ -1,0 +1,10 @@
+/* Владелец: devtools. Раздел настроек «Инструменты разработчика». */
+.kdt-warn {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; margin: 4px 0;
+  border-radius: var(--k-radius);
+  background: var(--k-warn-soft); color: var(--k-text);
+  font-size: var(--k-fs-sm); line-height: 1.45;
+}
+.kdt-warn > .k-ic { color: var(--k-warn); margin-top: 1px; }
+.kdt-warn b { font-weight: 600; }

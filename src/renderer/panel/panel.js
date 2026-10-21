@@ -177,8 +177,12 @@
     invoke('kosmo:tabs.list', {}).then((r) => { if (r && !tabs.list.length) applyTabs(r); }).catch(() => {});
     invoke('kosmo:layout.get', {}).then((l) => { if (l) { Object.assign(layout, l); if (l.panelOpen !== undefined) setVisible(!!l.panelOpen); } }).catch(() => {});
     invoke('kosmo:settings.get', { path: 'ui.panelTool' }).then((tool) => {
-      initPending = false;
-      if (!activeId) show(typeof tool === 'string' && tools.has(tool) ? tool : firstTool(), { fromMain: true });
+      // ответ может прийти раньше, чем defer-скрипты инструментов зарегистрируются (themes: «Свой CSS…» открывал DevTools)
+      const pick = () => {
+        initPending = false;
+        if (!activeId) show(typeof tool === 'string' && tools.has(tool) ? tool : firstTool(), { fromMain: true });
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pick, { once: true }); else pick();
     }).catch(() => { initPending = false; if (!activeId) show(firstTool(), { fromMain: true }); });
   }
   function firstTool() { const b = tabsEl.firstElementChild; return b ? b.dataset.id : null; }

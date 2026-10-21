@@ -1,0 +1,76 @@
+/* Владелец: devtools. Инструмент «Хранилище». */
+.ks { display: flex; flex-direction: column; overflow: hidden !important; }
+
+.ks-head { display: flex; align-items: center; gap: 10px; padding: 10px 8px 8px 12px; flex-shrink: 0; }
+.ks-ic { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: var(--k-radius); background: var(--k-surface); color: var(--k-text-dim); }
+.ks-site { flex: 1; min-width: 0; }
+.ks-host { font-weight: 600; font-size: var(--k-fs-lg); line-height: 1.25; }
+.ks-sub { color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+
+.ks-tabs { flex-shrink: 0; padding: 0 6px; }
+.ks-tabs > button { height: 30px; padding: 0 10px; font-size: var(--k-fs-sm); }
+.ks-n { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; }
+
+.ks-tools { display: flex; align-items: center; gap: 4px; padding: 8px 8px 6px; flex-shrink: 0; }
+.ks-tools[hidden] { display: none; }
+.ks-filter { flex: 1; min-width: 0; }
+.ks-filter .k-ic { left: 8px; }
+.ks-filter .k-input { padding-left: 26px; }
+
+.ks-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 0 8px; }
+.ks-list { display: flex; flex-direction: column; }
+
+.ks-row { padding: 5px 8px 6px 12px; border-bottom: 1px solid var(--k-border); }
+.ks-row:hover { background: var(--k-surface-hover); }
+.ks-line1 { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.ks-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--k-surface-active); }
+.ks-row.sent .ks-dot { background: var(--k-ok); }
+.ks-name { font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1px); font-weight: 600; color: var(--k-text); flex: 0 1 auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-val {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1.5px); color: var(--k-text-dim);
+  padding: 1px 4px; border-radius: 4px; cursor: text;
+}
+.ks-val:hover { background: var(--k-bg-sunken); color: var(--k-text); }
+.ks-emptyv { color: var(--k-text-faint); font-style: italic; font-family: var(--k-font); }
+.ks-inline { width: 100%; height: 22px; font-family: var(--k-mono); }
+.ks-acts { display: flex; gap: 1px; flex-shrink: 0; opacity: 0; transition: opacity var(--k-dur-fast) var(--k-ease); }
+.ks-row:hover .ks-acts, .ks-row:focus-within .ks-acts { opacity: 1; }
+.ks-line2 { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; padding-left: 14px; color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.ks-sepd { opacity: 0.6; }
+.ks-flag { height: 16px; padding: 0 5px; border-radius: 4px; background: var(--k-surface); color: var(--k-text-dim); font-size: 10px; font-weight: 600; line-height: 16px; }
+.ks-flag.json { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.ks-len { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin-left: auto; font-variant-numeric: tabular-nums; }
+.ks-wrow .ks-name { max-width: none; flex: 1; }
+.ks-wval {
+  font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1.5px); color: var(--k-text-dim);
+  white-space: pre-wrap; word-break: break-all; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  padding-left: 0; margin-top: 2px;
+}
+
+/* редактор */
+.ks-editor { margin: 6px 8px; padding: 10px; border-radius: var(--k-radius-lg); background: var(--k-bg-elev); border: 1px solid var(--k-border-strong); }
+.ks-fgrid { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 6px 8px; align-items: center; }
+.ks-fgrid > label { color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.ks-fgrid .k-input, .ks-fgrid .k-select { width: 100%; }
+.ks-ta { min-height: 56px; height: 64px; font-family: var(--k-mono); font-size: calc(var(--k-fs) - 1.5px); word-break: break-all; }
+.ks-ta.tall { height: 160px; white-space: pre; }
+.ks-frow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ks-frow .k-input { flex: 1; min-width: 150px; width: auto; }
+.ks-frow .k-select { width: auto; }
+.ks-chk { display: inline-flex; align-items: center; gap: 6px; font-size: var(--k-fs-sm); white-space: nowrap; }
+.ks-flabel { color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.ks-factions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.ks-hint { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin-top: 6px; }
+.ks-editor > .kd-note { margin-top: 8px; }
+
+/* низ: очистка данных сайта */
+.ks-foot { flex-shrink: 0; display: flex; align-items: center; padding: 6px 8px; border-top: 1px solid var(--k-border); background: var(--k-bg-sunken); }
+.ks-foot[hidden] { display: none; }
+.ks-confirm { display: flex; align-items: center; gap: 8px; width: 100%; color: var(--k-text); font-size: var(--k-fs-sm); }
+.ks-confirm > .k-ic { color: var(--k-warn); }
+.ks-confirm.ok > .k-ic { color: var(--k-ok); }
+.ks-ctext { flex: 1; min-width: 0; }
+.ks-danger-solid { background: var(--k-danger); border-color: transparent; color: #fff; }
+.ks-danger-solid:hover { background: color-mix(in oklab, var(--k-danger), black 10%); border-color: transparent; }

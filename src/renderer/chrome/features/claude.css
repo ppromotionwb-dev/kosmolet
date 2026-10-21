@@ -1,0 +1,43 @@
+/* Владелец: claude-bridge. Кнопка Claude и плашка-сообщение у неё. */
+.kcl-btn { position: relative; }
+.kcl-dot {
+  position: absolute; right: 4px; bottom: 4px;
+  width: 7px; height: 7px; border-radius: 50%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1.5px solid var(--k-text-faint);
+  box-shadow: 0 0 0 1.5px var(--k-bg-elev);
+  pointer-events: none;
+  transition: background-color var(--k-dur) var(--k-ease), border-color var(--k-dur) var(--k-ease), opacity var(--k-dur) var(--k-ease);
+}
+.kcl-btn[data-mode="read"] .kcl-dot { background: var(--k-accent); border-color: var(--k-accent); opacity: 0.75; }
+.kcl-btn[data-mode="full"] .kcl-dot { background: var(--k-ok); border-color: var(--k-ok); opacity: 0.75; }
+.kcl-btn[data-mode="error"] .kcl-dot { background: var(--k-danger); border-color: var(--k-danger); }
+.kcl-btn.live .kcl-dot { opacity: 1; }
+.kcl-btn.live[data-mode="full"] .kcl-dot { box-shadow: 0 0 0 1.5px var(--k-bg-elev), 0 0 0 4px var(--k-ok-soft); }
+.kcl-btn.live[data-mode="read"] .kcl-dot { box-shadow: 0 0 0 1.5px var(--k-bg-elev), 0 0 0 4px var(--k-accent-soft); }
+
+.kcl-chip {
+  position: fixed; z-index: 50;
+  height: 28px; max-width: min(360px, 60vw);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--k-radius);
+  background: var(--k-bg-elev);
+  border: 1px solid var(--k-border-strong);
+  box-shadow: var(--k-shadow-sm);
+  color: var(--k-text); font-size: var(--k-fs-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0; transform: translateX(6px);
+  transition: opacity var(--k-dur) var(--k-ease), transform var(--k-dur) var(--k-ease);
+}
+.kcl-chip.show { opacity: 1; transform: none; }
+.kcl-chip > .k-ic { flex: 0 0 auto; color: var(--k-text-dim); }
+.kcl-chip[data-tone="ok"] > .k-ic { color: var(--k-ok); }
+.kcl-chip[data-tone="danger"] { border-color: color-mix(in srgb, var(--k-danger) 50%, transparent); }
+.kcl-chip[data-tone="danger"] > .k-ic { color: var(--k-danger); }
+.kcl-chip-text { overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) {
+  .kcl-chip, .kcl-dot { transition: none; }
+}

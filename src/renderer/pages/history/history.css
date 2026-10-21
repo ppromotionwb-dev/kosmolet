@@ -1,0 +1,58 @@
+/* История. Владелец: ux-chrome. Общие классы — также страница загрузок. */
+.hs-summary { color: var(--k-text-faint); font-size: var(--k-fs-sm); margin: -6px 4px 14px; }
+.hs-day { margin-bottom: 18px; }
+.hs-day-title {
+  position: sticky; top: 56px; z-index: 2;
+  padding: 10px 4px 6px;
+  background: var(--k-bg);
+  color: var(--k-text-dim); font-weight: 600;
+}
+.hs-day-title .k-faint { font-weight: 400; margin-left: 6px; }
+.hs-card { background: var(--k-bg-elev); border: 1px solid var(--k-border); border-radius: var(--k-radius-lg); padding: 4px; }
+.hs-row {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 38px; padding: 3px 6px 3px 10px;
+  border-radius: var(--k-radius);
+}
+.hs-row:hover { background: var(--k-surface-hover); }
+.hs-time { width: 40px; flex-shrink: 0; color: var(--k-text-faint); font-size: var(--k-fs-sm); font-variant-numeric: tabular-nums; }
+.hs-fav { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; }
+.hs-fav img { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; }
+.hs-letter {
+  width: 16px; height: 16px; display: grid; place-items: center; border-radius: 4px;
+  background: var(--k-accent-soft); color: var(--k-accent-text); font-size: 10px; font-weight: 700;
+}
+.hs-main { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; overflow: hidden; }
+.hs-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text) !important; }
+.hs-title:hover { text-decoration: underline; }
+.hs-host { flex: 0 10000 auto; min-width: 60px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.hs-count { flex-shrink: 0; }
+.hs-del { visibility: hidden; }
+.hs-row:hover .hs-del, .hs-del:focus-visible { visibility: visible; }
+.hs-row.removing { opacity: 0; transition: opacity var(--k-dur) var(--k-ease); }
+.hs-more { display: flex; justify-content: center; padding: 8px 0 24px; min-height: 40px; color: var(--k-text-faint); }
+.hs-more .k-spinner { margin: 4px; }
+mark.hs-hl { background: var(--k-accent-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* окно подтверждения */
+.kp-modal-back {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16vh 16px 16px;
+  background: var(--k-backdrop);
+  animation: kp-fade var(--k-dur) var(--k-ease);
+}
+.kp-modal {
+  width: min(440px, 100%);
+  background: var(--k-bg-elev); border: 1px solid var(--k-border-strong);
+  border-radius: var(--k-radius-lg); box-shadow: var(--k-shadow);
+  animation: kp-in var(--k-dur) var(--k-ease);
+}
+.kp-modal-body { display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 14px; }
+.kp-modal-body p { color: var(--k-text-dim); }
+.kp-modal-body .k-select { width: 100%; }
+.kp-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--k-border); background: var(--k-bg); border-radius: 0 0 var(--k-radius-lg) var(--k-radius-lg); }
+.kp-modal-foot .k-btn-danger { background: var(--k-danger-soft); border-color: transparent; }
+.kp-modal-foot .k-btn-danger:hover { background: color-mix(in srgb, var(--k-danger) 26%, transparent); }
+@keyframes kp-fade { from { opacity: 0; } }
+@keyframes kp-in { from { opacity: 0; transform: translateY(-6px); } }

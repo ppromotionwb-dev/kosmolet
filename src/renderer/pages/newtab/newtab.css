@@ -1,25 +1,83 @@
-/* Новая вкладка — заглушка core (владелец страницы: ux-chrome). */
-html, body { height: 100%; background: var(--k-bg); }
+/* Новая вкладка. Владелец: ux-chrome. Лёгкая: без картинок, только favicon сайтов. */
+html, body { min-height: 100%; background: var(--k-bg); }
 body { display: flex; justify-content: center; }
-.nt { width: 100%; max-width: 640px; padding: 22vh 24px 40px; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.nt { width: 100%; max-width: 760px; padding: 18vh 24px 48px; display: flex; flex-direction: column; gap: 36px; }
+
+.nt-hero { display: flex; flex-direction: column; align-items: center; gap: 22px; }
 .nt-logo { color: var(--k-accent-text); opacity: 0.9; }
+
 .nt-search {
-  position: relative; width: 100%;
-  display: flex; align-items: center;
-  height: 48px; border-radius: 24px;
+  position: relative; width: 100%; max-width: 620px;
+  display: flex; align-items: center; gap: 12px;
+  height: 48px; padding: 0 20px 0 18px;
+  border-radius: 24px;
   background: var(--k-surface);
   border: 1px solid var(--k-border);
   box-shadow: var(--k-shadow-sm);
+  color: var(--k-text-faint);
+  font-size: calc(var(--k-fs) + 3px);
+  text-align: left;
+  cursor: text;
   transition: border-color var(--k-dur-fast) var(--k-ease), background-color var(--k-dur-fast) var(--k-ease);
 }
-.nt-search:hover { background: var(--k-surface-hover); }
-.nt-search:focus-within { border-color: var(--k-accent); background: var(--k-bg-elev); box-shadow: 0 0 0 4px var(--k-accent-faint); }
-.nt-search-icon { position: absolute; left: 18px; color: var(--k-text-faint); }
-.nt-search input {
-  width: 100%; height: 100%; padding: 0 20px 0 48px;
-  border: 0; outline: 0; background: transparent;
-  font-size: calc(var(--k-fs) + 3px); color: var(--k-text);
-  caret-color: var(--k-accent);
+.nt-search:hover { background: var(--k-surface-hover); border-color: var(--k-border-strong); }
+.nt-search:focus-visible { outline: none; border-color: var(--k-accent); box-shadow: 0 0 0 4px var(--k-accent-faint); }
+.nt-search-icon { display: flex; color: var(--k-text-faint); }
+.nt-placeholder { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.nt-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.nt-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 28px; padding: 0 11px 0 5px;
+  border-radius: 14px;
+  border: 1px solid var(--k-border);
+  background: transparent;
+  color: var(--k-text-dim); font-size: var(--k-fs-sm);
+  transition: background-color var(--k-dur-fast) var(--k-ease), color var(--k-dur-fast) var(--k-ease), border-color var(--k-dur-fast) var(--k-ease);
 }
-.nt-search input::placeholder { color: var(--k-text-faint); }
-.nt-hint { color: var(--k-text-faint); font-size: var(--k-fs-sm); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.nt-chip:hover { background: var(--k-surface); color: var(--k-text); border-color: var(--k-border-strong); }
+.nt-chip .k-kbd { height: 18px; min-width: 22px; border-radius: 9px; border-bottom-width: 1px; font-family: var(--k-mono); font-weight: 600; }
+
+.nt-section { display: flex; flex-direction: column; gap: 10px; }
+.nt-section > .k-label { padding: 0 6px; }
+.nt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.nt-tile {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 8px 10px;
+  border-radius: var(--k-radius-lg);
+  color: var(--k-text);
+  text-decoration: none !important;
+  transition: background-color var(--k-dur-fast) var(--k-ease);
+}
+.nt-tile:hover { background: var(--k-surface); }
+.nt-tile:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
+.nt-tile-ic {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--k-surface);
+  border: 1px solid var(--k-border);
+}
+.nt-tile:hover .nt-tile-ic { background: var(--k-bg-elev); }
+.nt-tile-ic img { width: 22px; height: 22px; border-radius: 4px; object-fit: contain; }
+.nt-tile-letter { font-size: 17px; font-weight: 650; color: var(--k-accent-text); }
+.nt-tile-title {
+  width: 100%;
+  font-size: var(--k-fs-sm); line-height: 1.3; text-align: center;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  word-break: break-word;
+  color: var(--k-text-dim);
+}
+.nt-tile:hover .nt-tile-title { color: var(--k-text); }
+.nt-tile-x {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: var(--k-text-faint);
+  opacity: 0;
+  transition: opacity var(--k-dur-fast) var(--k-ease), background-color var(--k-dur-fast) var(--k-ease);
+}
+.nt-tile:hover .nt-tile-x, .nt-tile-x:focus-visible { opacity: 1; }
+.nt-tile-x:hover { background: var(--k-surface-active); color: var(--k-text); }
+
+@media (max-width: 560px) { .nt { padding-top: 10vh; } }

@@ -1,0 +1,3 @@
+/* Владелец: devtools. Подложка инструмента «DevTools» (сам DevTools — отдельный вид поверх). */
+.kdt { display: flex; align-items: center; justify-content: center; }
+.kdt-box { width: 100%; max-width: 360px; }

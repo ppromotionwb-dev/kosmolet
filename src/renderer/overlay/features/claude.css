@@ -1,0 +1,70 @@
+/* Владелец: claude-bridge. Поповер Claude. */
+.kcl-pop { width: 360px; }
+.kcl-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 14px; }
+.kcl-logo {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: var(--k-radius);
+  background: var(--k-accent-soft); color: var(--k-accent-text);
+  transition: background-color var(--k-dur) var(--k-ease), color var(--k-dur) var(--k-ease);
+}
+.kcl-pop.off .kcl-logo { background: var(--k-surface); color: var(--k-text-dim); }
+.kcl-head-text { flex: 1; min-width: 0; }
+.kcl-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.kcl-sub { display: flex; align-items: center; gap: 2px; min-width: 0; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.kcl-url { min-width: 0; }
+.kcl-pill {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 7px;
+  border-radius: var(--k-radius-pill);
+  font-size: var(--k-fs-xs); font-weight: 600;
+  background: var(--k-surface); color: var(--k-text-dim);
+}
+.kcl-pill[data-tone="full"] { background: var(--k-ok-soft); color: var(--k-ok); }
+.kcl-pill[data-tone="read"] { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.kcl-pill[data-tone="danger"] { background: var(--k-danger-soft); color: var(--k-danger); }
+
+.kcl-section { padding: 8px 14px 10px; border-top: 1px solid var(--k-border); }
+.kcl-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
+.kcl-row-tight { min-height: 26px; margin-bottom: 2px; }
+.kcl-label { color: var(--k-text-dim); }
+.kcl-seg > button { padding: 0 10px; font-size: var(--k-fs-sm); }
+.kcl-hint { margin-top: 4px; color: var(--k-text-faint); font-size: var(--k-fs-sm); line-height: 1.35; }
+.kcl-hint[data-tone="danger"] { color: var(--k-danger); }
+
+.kcl-list { display: flex; flex-direction: column; margin: 0 -6px; }
+.kcl-item {
+  display: grid; grid-template-columns: 58px 92px minmax(0, 1fr) auto 14px; align-items: center; gap: 6px;
+  height: 24px; padding: 0 6px; border-radius: var(--k-radius-sm);
+  font-size: var(--k-fs-sm); color: var(--k-text-dim);
+}
+.kcl-item:hover { background: var(--k-surface-hover); }
+.kcl-time { color: var(--k-text-faint); font-variant-numeric: tabular-nums; }
+.kcl-tool { color: var(--k-text); font-size: var(--k-fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kcl-arg { color: var(--k-text-faint); }
+.kcl-ms { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; }
+.kcl-item > .k-ic { color: var(--k-ok); }
+.kcl-item.bad > .k-ic, .kcl-item.bad .kcl-tool { color: var(--k-danger); }
+.kcl-empty { display: flex; align-items: center; gap: 8px; padding: 6px 6px 4px; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.kcl-empty.bad { color: var(--k-danger); }
+
+.kcl-actions { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.kcl-actions .k-btn-primary { flex: 1; justify-content: center; }
+.kcl-done { color: var(--k-ok) !important; }
+.kcl-out {
+  margin: 8px 0 0; padding: 7px 9px; max-height: 120px; overflow: auto;
+  border-radius: var(--k-radius-sm); background: var(--k-bg-sunken); border: 1px solid var(--k-border);
+  font: var(--k-fs-xs)/1.4 var(--k-mono); color: var(--k-text-dim);
+  white-space: pre-wrap; word-break: break-word; user-select: text;
+}
+.kcl-out[data-tone="ok"] { border-color: color-mix(in srgb, var(--k-ok) 40%, transparent); }
+.kcl-out[data-tone="danger"] { border-color: color-mix(in srgb, var(--k-danger) 45%, transparent); color: var(--k-text); }
+
+.kcl-foot { display: flex; flex-direction: column; padding: 4px; border-top: 1px solid var(--k-border); }
+.kcl-quick {
+  display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px;
+  border-radius: var(--k-radius-sm); color: var(--k-text); text-align: left;
+}
+.kcl-quick > span:not(.k-kbd) { flex: 1; }
+.kcl-quick > .k-ic { color: var(--k-text-dim); }
+.kcl-quick:hover { background: var(--k-surface-hover); }
+.kcl-quick .k-kbd { opacity: 0.8; }

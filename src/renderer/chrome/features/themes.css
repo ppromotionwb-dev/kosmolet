@@ -1,0 +1,9 @@
+/* Владелец: themes. Луна темы сайта в адресной строке. */
+#slot-omnibox-right .kt-moon.on { color: var(--k-accent-text); background: transparent; }
+#slot-omnibox-right .kt-moon.on:hover { background: var(--k-accent-faint); }
+#slot-omnibox-right .kt-moon.pulse { animation: kt-moon-pulse var(--k-dur-slow) var(--k-ease); }
+@keyframes kt-moon-pulse {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.22); background: var(--k-accent-soft); }
+  100% { transform: scale(1); }
+}

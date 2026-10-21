@@ -1,0 +1,73 @@
+/* Владелец: ux-chrome. Полоса закладок, звезда, кнопка загрузок. */
+
+/* звезда в адресной строке */
+#slot-omnibox-right .ux-starred { color: var(--k-accent-text); }
+#slot-omnibox-right .ux-starred:hover { color: var(--k-accent-text); }
+
+/* ---------- полоса закладок ---------- */
+.ux-bm-bar {
+  gap: 2px;
+  height: var(--k-bm-h);
+  padding: 0 6px;
+  border-top: 0 !important;
+  overflow: hidden;
+}
+.ux-bm-items {
+  position: relative;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 2px;
+  height: 100%;
+  overflow: hidden;
+}
+.ux-bm-item, .ux-bm-btn {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: calc(var(--k-bm-h) - 6px);
+  max-width: 180px;
+  padding: 0 8px 0 7px;
+  border-radius: var(--k-radius-sm);
+  color: var(--k-text-dim);
+  font-size: var(--k-fs-sm);
+  white-space: nowrap;
+  transition: background-color var(--k-dur-fast) var(--k-ease), color var(--k-dur-fast) var(--k-ease);
+}
+.ux-bm-item:hover, .ux-bm-btn:hover { background: var(--k-surface-hover); color: var(--k-text); }
+.ux-bm-item:active, .ux-bm-btn:active { background: var(--k-surface-active); }
+.ux-bm-title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ux-bm-ic { width: 16px; height: 16px; flex-shrink: 0; display: grid; place-items: center; }
+.ux-bm-ic img { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; }
+.ux-bm-letter {
+  width: 16px; height: 16px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  background: var(--k-accent-soft);
+  color: var(--k-accent-text);
+  font-size: 10px; font-weight: 700; line-height: 1;
+}
+.ux-bm-btn .k-ic { color: var(--k-text-faint); }
+.ux-bm-btn:hover .k-ic { color: var(--k-text-dim); }
+.ux-bm-more { padding: 0 6px; }
+.ux-bm-other { margin-left: 2px; position: relative; }
+.ux-bm-other::before {
+  content: ""; position: absolute; left: -3px; top: 50%; width: 1px; height: 14px; margin-top: -7px;
+  background: var(--k-border-strong);
+}
+.ux-bm-empty {
+  flex: 1 1 auto; min-width: 0;
+  padding: 0 8px;
+  color: var(--k-text-faint); font-size: var(--k-fs-xs);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+
+/* перетаскивание */
+.ux-bm-bar.dragging .ux-bm-item:not(.dragging) { transition: none; }
+.ux-bm-item.dragging { background: var(--k-surface-active); color: var(--k-text); opacity: 0.85; }
+.ux-bm-other.drop { background: var(--k-accent-soft); color: var(--k-text); box-shadow: inset 0 0 0 1px var(--k-accent); }
+
+/* ---------- кнопка загрузок ---------- */
+.ux-dl-btn.active { color: var(--k-accent-text); }
+.ux-dl-btn .ux-ring-track { stroke: var(--k-border-strong); }
+.ux-dl-btn .ux-ring-val { stroke: var(--k-accent); transition: stroke-dashoffset var(--k-dur) var(--k-ease); }
+.ux-dl-btn .ux-ring-spin { transform-origin: 12px 12px; animation: ux-ring-spin 1.1s linear infinite; }
+@keyframes ux-ring-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ux-dl-btn .ux-ring-spin { animation-duration: 3s; } }
