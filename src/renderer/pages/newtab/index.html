@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Новая вкладка</title>
+  <link rel="stylesheet" href="/shared/tokens.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="newtab.css">
+  <script src="/shared/theme.js"></script>
+  <script src="/shared/icons.js" defer></script>
+  <script src="/shared/kui.js" defer></script>
+  <script src="newtab.js" defer></script>
+</head>
+<body>
+  <!-- Владелец: ux-chrome. Заглушка core — фича заменит страницу. -->
+  <main class="nt">
+    <div class="nt-logo" id="nt-logo"></div>
+    <form class="nt-search" id="nt-form" autocomplete="off">
+      <span class="nt-search-icon" id="nt-icon"></span>
+      <input id="nt-q" type="text" spellcheck="false" placeholder="Поиск или адрес" aria-label="Поиск или адрес">
+    </form>
+    <p class="nt-hint">Бэнги: <span class="k-kbd">wb</span> <span class="k-kbd">oz</span> <span class="k-kbd">ym</span> <span class="k-kbd">gh</span> и пробел — поиск по сайту</p>
+  </main>
+</body>
+</html>

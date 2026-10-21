@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Настройки</title>
+  <link rel="stylesheet" href="/shared/tokens.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="settings.css">
+  <script src="/shared/theme.js"></script>
+  <script src="/shared/icons.js" defer></script>
+  <script src="/shared/kui.js" defer></script>
+  <script src="settings.js" defer></script>
+  <!-- разделы: по файлу на владельца -->
+  <script src="sections/appearance.js" defer></script>
+  <script src="sections/site-themes.js" defer></script>
+  <script src="sections/search.js" defer></script>
+  <script src="sections/containers.js" defer></script>
+  <script src="sections/privacy.js" defer></script>
+  <script src="sections/claude.js" defer></script>
+  <script src="sections/devtools.js" defer></script>
+  <script src="sections/performance.js" defer></script>
+  <script src="sections/shortcuts.js" defer></script>
+  <script src="sections/about.js" defer></script>
+</head>
+<body>
+  <div class="ks-app">
+    <aside class="ks-side">
+      <div class="ks-brand"><span id="ks-logo"></span><span>Настройки</span></div>
+      <label class="k-search ks-search">
+        <span id="ks-search-icon"></span>
+        <input id="ks-q" class="k-input" type="search" placeholder="Поиск настроек" spellcheck="false" autocomplete="off" aria-label="Поиск настроек">
+      </label>
+      <nav id="ks-nav" class="k-list" aria-label="Разделы"></nav>
+    </aside>
+    <main id="ks-main" class="ks-main">
+      <div id="ks-content" class="ks-content"></div>
+    </main>
+  </div>
+</body>
+</html>

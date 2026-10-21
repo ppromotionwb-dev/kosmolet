@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Космолёт</title>
+  <link rel="stylesheet" href="/shared/tokens.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="chrome.css">
+  <!-- тема — синхронно, до отрисовки -->
+  <script src="/shared/theme.js"></script>
+  <script src="/shared/icons.js" defer></script>
+  <script src="/shared/kui.js" defer></script>
+  <script src="chrome.js" defer></script>
+  <!-- фичи: по файлу на владельца (ARCHITECTURE §6) -->
+  <script src="features/ux-chrome.js" defer></script>
+  <script src="features/themes.js" defer></script>
+  <script src="features/platform.js" defer></script>
+  <script src="features/claude.js" defer></script>
+  <script src="features/devtools.js" defer></script>
+  <script src="features/tools-pack.js" defer></script>
+</head>
+<body>
+  <div id="chrome">
+    <div id="tabbar">
+      <div id="tabstrip" role="tablist" aria-label="Вкладки">
+        <div id="tabs"></div>
+        <button id="new-tab" class="k-icon-btn" title="Новая вкладка (Ctrl+T)" aria-label="Новая вкладка"></button>
+      </div>
+      <div id="tabbar-drag"></div>
+    </div>
+    <div id="toolbar">
+      <div id="nav">
+        <button id="nav-back" class="k-icon-btn" title="Назад (Alt+←)" aria-label="Назад" disabled></button>
+        <button id="nav-forward" class="k-icon-btn" title="Вперёд (Alt+→)" aria-label="Вперёд" disabled></button>
+        <button id="nav-reload" class="k-icon-btn" title="Обновить (F5)" aria-label="Обновить"></button>
+      </div>
+      <div id="omnibox">
+        <button id="omni-security" class="omni-chip" tabindex="-1"></button>
+        <div class="omni-field">
+          <input id="omni-input" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"
+                 placeholder="Поиск или адрес" aria-label="Адресная строка">
+          <div id="omni-display" class="omni-display" aria-hidden="true"></div>
+        </div>
+        <div id="slot-omnibox-right"></div>
+      </div>
+      <div id="slot-toolbar-right"></div>
+    </div>
+    <div id="slot-bars"></div>
+  </div>
+</body>
+</html>

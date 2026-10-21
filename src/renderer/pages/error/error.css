@@ -1,0 +1,30 @@
+/* Космолёт — страница ошибки загрузки. Владелец: core. */
+html, body { min-height: 100%; background: var(--k-bg); }
+body { display: flex; align-items: flex-start; justify-content: center; padding: 14vh 24px 48px; }
+.er { width: 100%; max-width: 560px; display: flex; flex-direction: column; align-items: flex-start; }
+.er-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--k-surface); color: var(--k-text-dim);
+  margin-bottom: 22px;
+}
+.er-icon[data-tone="warn"] { background: var(--k-warn-soft); color: var(--k-warn); }
+.er-icon[data-tone="danger"] { background: var(--k-danger-soft); color: var(--k-danger); }
+.er-icon[data-tone="accent"] { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.er-title { font-size: calc(var(--k-fs) + 11px); font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; margin-bottom: 10px; }
+.er-text { color: var(--k-text-dim); font-size: var(--k-fs-lg); line-height: 1.5; margin-bottom: 14px; }
+.er-url {
+  max-width: 100%; padding: 6px 10px; margin-bottom: 18px;
+  border-radius: var(--k-radius-sm);
+  background: var(--k-bg-sunken); border: 1px solid var(--k-border);
+  color: var(--k-text-dim); word-break: break-all;
+  user-select: text;
+}
+.er-url:empty { display: none; }
+.er-tips { margin: 0 0 22px; display: flex; flex-direction: column; gap: 6px; color: var(--k-text-dim); }
+.er-tips:empty { display: none; }
+.er-tips li { position: relative; padding-left: 16px; }
+.er-tips li::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 5px; height: 5px; border-radius: 50%; background: var(--k-text-faint); }
+.er-tips code { font-family: var(--k-mono); font-size: calc(var(--k-fs) - 0.5px); color: var(--k-text); }
+.er-actions { display: flex; gap: 8px; }
+.er-code { margin-top: 28px; color: var(--k-text-faint); font-size: var(--k-fs-xs); user-select: text; }

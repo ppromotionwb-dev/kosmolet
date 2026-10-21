@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Космолёт — инструменты</title>
+  <link rel="stylesheet" href="/shared/tokens.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="panel.css">
+  <script src="/shared/theme.js"></script>
+  <script src="/shared/icons.js" defer></script>
+  <script src="/shared/kui.js" defer></script>
+  <script src="panel.js" defer></script>
+  <!-- инструменты: по файлу на инструмент, владелец указан в файле (ARCHITECTURE §6) -->
+  <script src="tools/devtools.js" defer></script>
+  <script src="tools/network.js" defer></script>
+  <script src="tools/storage.js" defer></script>
+  <script src="tools/emulation.js" defer></script>
+  <script src="tools/claude.js" defer></script>
+  <script src="tools/theme.js" defer></script>
+  <script src="tools/snippets.js" defer></script>
+  <script src="tools/xray.js" defer></script>
+</head>
+<body>
+  <div id="panel">
+    <div id="resizer" title="Потяните, чтобы изменить ширину. Двойной клик — по умолчанию"></div>
+    <header id="head">
+      <div id="tool-tabs" role="tablist" aria-label="Инструменты"></div>
+      <div id="tool-title" class="k-ellipsis"></div>
+      <button id="panel-close" class="k-icon-btn" title="Закрыть панель" aria-label="Закрыть панель"></button>
+    </header>
+    <main id="body"></main>
+  </div>
+</body>
+</html>

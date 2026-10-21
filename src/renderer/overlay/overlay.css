@@ -1,0 +1,84 @@
+/* Космолёт — всплывающий слой. Владелец: core.
+   Немодальный: вид ровно по карточке + 8px полей под тень. Модальный: на всё окно с затемнением. */
+
+html, body { height: 100%; overflow: hidden; background: transparent !important; }
+body { user-select: none; }
+#root { position: fixed; inset: 0; }
+
+:root { --ov-pad: 8px; }
+
+/* немодальный поповер */
+.ov-pop { position: absolute; left: 0; top: 0; padding: var(--ov-pad); }
+.ov-card {
+  position: relative;
+  min-width: 120px;
+  background: var(--k-bg-elev);
+  border: 1px solid var(--k-border-strong);
+  border-radius: var(--k-radius-lg);
+  box-shadow: var(--k-shadow-pop);
+  color: var(--k-text);
+  overflow: hidden;
+  outline: none;
+  animation: ov-in var(--k-dur-fast) var(--k-ease);
+}
+/* ширина не ограничена окном слоя: до первого resize main даёт виду временный размер */
+.ov-pop .ov-card { width: max-content; }
+@keyframes ov-in { from { opacity: 0; transform: translateY(-3px); } }
+
+/* модальный */
+.ov-modal {
+  position: fixed; inset: 0;
+  display: flex; justify-content: center; align-items: center;
+  padding: 24px;
+  background: var(--k-backdrop);
+  animation: ov-fade var(--k-dur) var(--k-ease);
+}
+.ov-modal[data-align="top"] { align-items: flex-start; padding-top: 12vh; }
+.ov-modal .ov-card {
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  box-shadow: var(--k-shadow);
+  animation: ov-in-modal var(--k-dur) var(--k-ease);
+}
+.ov-modal[data-align="top"] .ov-card { max-height: calc(88vh - 24px); }
+@keyframes ov-fade { from { opacity: 0; } }
+@keyframes ov-in-modal { from { opacity: 0; transform: translateY(-6px) scale(0.99); } }
+
+/* общие части карточек */
+.ov-head {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px; padding: 6px 6px 6px 14px;
+  border-bottom: 1px solid var(--k-border);
+}
+.ov-head .ov-title { flex: 1; min-width: 0; font-weight: 600; }
+.ov-body { padding: 12px 14px; }
+.ov-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--k-border);
+  background: var(--k-bg);
+}
+.ov-scroll { overflow: auto; overscroll-behavior: contain; }
+
+/* меню-список */
+.ov-menu { display: flex; flex-direction: column; padding: 4px; min-width: 220px; }
+.ov-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 30px; padding: 4px 10px;
+  border-radius: var(--k-radius-sm);
+  color: var(--k-text);
+  text-align: left;
+  width: 100%;
+}
+.ov-menu-item > .k-ic { color: var(--k-text-dim); }
+.ov-menu-item:hover, .ov-menu-item.hl { background: var(--k-surface-hover); }
+.ov-menu-item.hl { background: var(--k-accent-faint); }
+.ov-menu-item:disabled { opacity: 0.45; }
+.ov-menu-item.danger, .ov-menu-item.danger > .k-ic { color: var(--k-danger); }
+.ov-menu-item .ov-mi-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ov-menu-item .ov-mi-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ov-menu-item .ov-mi-sub { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--k-fs-sm); color: var(--k-text-faint); }
+.ov-menu-item .ov-mi-meta { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.ov-menu-sep { height: 1px; margin: 4px 6px; background: var(--k-border); }
+.ov-menu-label { padding: 6px 10px 2px; }

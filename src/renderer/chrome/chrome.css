@@ -1,0 +1,287 @@
+/* Космолёт — верх окна (вкладки, адресная строка, полосы). Владелец: core. */
+
+html, body { height: 100%; overflow: hidden; background: var(--k-bg); }
+body { user-select: none; cursor: default; }
+
+:root {
+  /* место под нативные кнопки окна (titleBarOverlay); запас 140px, если env() недоступен */
+  --wco-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px)));
+  --tab-gap-top: 6px;
+  --tab-inner-h: calc(var(--k-tab-h) - var(--tab-gap-top));
+  --tab-w: 220px;
+  --pin-w: 40px;
+  --strip-bg: var(--k-bg-sunken);
+  --bar-bg: var(--k-bg-elev);   /* панель и активная вкладка — выше полосы вкладок */
+  --omni-bg: var(--k-bg);       /* тёмные темы: адресная строка «вдавлена» в панель */
+  --omni-hover: var(--k-surface);
+}
+:root[data-scheme="light"] { --omni-bg: var(--k-surface); --omni-hover: var(--k-surface-hover); }
+:root[data-density="compact"] { --tab-gap-top: 4px; --pin-w: 36px; }
+
+#chrome { position: relative; background: var(--bar-bg); border-bottom: 1px solid var(--k-border); }
+:root.fullscreen #chrome { display: none; }
+
+/* ---------- полоса вкладок ---------- */
+#tabbar {
+  display: flex; align-items: flex-end;
+  height: var(--k-tab-h);
+  padding-right: var(--wco-right);
+  background: var(--strip-bg);
+  -webkit-app-region: drag;
+}
+#tabstrip { display: flex; align-items: flex-end; min-width: 0; height: 100%; flex: 0 1 auto; }
+#tabs {
+  display: flex; align-items: flex-end;
+  height: 100%; min-width: 0;
+  padding: 0 8px;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+#tabs::-webkit-scrollbar { display: none; }
+#tabbar-drag { flex: 1 1 0; min-width: 40px; height: 100%; }
+#new-tab {
+  -webkit-app-region: no-drag;
+  margin: 0 0 calc((var(--tab-inner-h) - var(--k-icon-btn)) / 2) 0;
+  width: var(--k-icon-btn); height: var(--k-icon-btn);
+}
+
+.tab {
+  position: relative; flex: 0 0 auto;
+  width: var(--tab-w);
+  height: var(--tab-inner-h);
+  color: var(--k-text-dim);
+  -webkit-app-region: no-drag;
+  contain: layout style;
+}
+.tab.pinned { width: var(--pin-w); }
+.tab.active { color: var(--k-text); z-index: 2; }
+.tab.dragging { z-index: 5; transition: none !important; }
+.tab.shifting { transition: transform var(--k-dur) var(--k-ease); }
+.tab.entering { animation: k-tab-in var(--k-dur) var(--k-ease); }
+@keyframes k-tab-in { from { opacity: 0; transform: translateY(4px); } }
+
+.tab-bg {
+  position: absolute; inset: 4px 2px; border-radius: var(--k-radius);
+  background: var(--k-surface-hover);
+  opacity: 0;
+  transition: opacity var(--k-dur-fast) var(--k-ease);
+}
+.tab:hover .tab-bg { opacity: 0.55; }
+.tab.active .tab-bg {
+  inset: 0; opacity: 1;
+  background: var(--bar-bg);
+  border-radius: var(--k-radius-lg) var(--k-radius-lg) 0 0;
+  transition: none;
+}
+/* «ушки» активной вкладки — вогнутые скругления к панели */
+.tab.active .tab-bg::before, .tab.active .tab-bg::after {
+  content: ""; position: absolute; bottom: 0; width: 8px; height: 8px; pointer-events: none;
+}
+.tab.active .tab-bg::before { left: -8px; border-bottom-right-radius: 8px; box-shadow: 4px 4px 0 4px var(--bar-bg); }
+.tab.active .tab-bg::after { right: -8px; border-bottom-left-radius: 8px; box-shadow: -4px 4px 0 4px var(--bar-bg); }
+
+/* разделители между неактивными вкладками */
+.tab-sep {
+  position: absolute; left: 0; top: 50%; width: 1px; height: 16px; margin-top: -8px;
+  background: var(--k-border-strong);
+  transition: opacity var(--k-dur-fast) var(--k-ease);
+}
+.tab:first-child .tab-sep, .tab.active .tab-sep, .tab:hover .tab-sep,
+.tab.active + .tab .tab-sep, .tab:hover + .tab .tab-sep, .tab.dragging .tab-sep, .tab.dragging + .tab .tab-sep { opacity: 0; }
+
+/* Claude работает с вкладкой — мягкое свечение акцентом */
+.tab-glow {
+  position: absolute; inset: 4px 2px; border-radius: var(--k-radius);
+  background: radial-gradient(120% 150% at 50% 100%, var(--k-accent-soft), transparent 72%);
+  box-shadow: inset 0 0 0 1px var(--k-accent-faint);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--k-dur-slow) var(--k-ease);
+}
+.tab.active .tab-glow { inset: 0 0 0 0; border-radius: var(--k-radius-lg) var(--k-radius-lg) 0 0; }
+.tab.claude .tab-glow { opacity: 1; }
+
+/* цвет контейнера */
+.tab-stripe {
+  position: absolute; left: 10px; right: 10px; top: 3px; height: 2px; border-radius: 2px;
+  background: var(--tab-color, transparent);
+  pointer-events: none;
+}
+.tab.active .tab-stripe { top: 0; left: 12px; right: 12px; border-radius: 0 0 2px 2px; }
+.tab.pinned .tab-stripe { left: 8px; right: 8px; }
+
+.tab-content {
+  position: relative; height: 100%;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 6px 0 11px;
+  min-width: 0;
+}
+.tab.pinned .tab-content, #tabs.tiny .tab .tab-content { justify-content: center; padding: 0; }
+
+.tab-icon {
+  position: relative; width: 16px; height: 16px; flex-shrink: 0;
+  display: grid; place-items: center;
+  color: var(--k-text-dim);
+}
+.tab-icon img { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; }
+.tab-icon .k-spinner { width: 14px; height: 14px; border-width: 1.8px; }
+.tab.discarded .tab-icon { opacity: 0.55; }
+.tab.crashed .tab-icon { color: var(--k-danger); }
+
+.tab-title {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; white-space: nowrap;
+  font-size: var(--k-fs-sm);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
+.tab.discarded:not(.active) .tab-title { opacity: 0.7; }
+.tab.pinned .tab-title, #tabs.tiny .tab .tab-title { display: none; }
+
+.tab-badges { display: flex; gap: 3px; flex-shrink: 0; }
+.tab-badge {
+  height: 16px; min-width: 16px; padding: 0 5px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  font-size: 10px; font-weight: 600; line-height: 1;
+  background: var(--k-surface-active); color: var(--k-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.tab-badge.dot { min-width: 6px; width: 6px; height: 6px; padding: 0; background: var(--k-accent); }
+.tab-badge[data-tone="accent"] { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.tab-badge[data-tone="ok"] { background: var(--k-ok-soft); color: var(--k-ok); }
+.tab-badge[data-tone="warn"] { background: var(--k-warn-soft); color: var(--k-warn); }
+.tab-badge[data-tone="danger"] { background: var(--k-danger-soft); color: var(--k-danger); }
+#tabs.narrow .tab .tab-badges, .tab.pinned .tab-badges { display: none; }
+
+.tab-btn {
+  width: 20px; height: 20px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--k-text-dim);
+  transition: background-color var(--k-dur-fast) var(--k-ease), color var(--k-dur-fast) var(--k-ease);
+}
+.tab-btn:hover { background: var(--k-surface-active); color: var(--k-text); }
+.tab-audio { color: var(--k-text-dim); }
+.tab-audio.muted { color: var(--k-text-faint); }
+.tab.pinned .tab-audio, #tabs.tiny .tab .tab-audio { display: none; }
+.tab-close { visibility: hidden; }
+.tab:hover .tab-close, .tab.active .tab-close { visibility: visible; }
+.tab.pinned .tab-close, #tabs.narrow .tab:not(.active) .tab-close { display: none; }
+/* совсем узкая активная: вместо иконки — крестик */
+#tabs.tiny .tab.active:not(.pinned) .tab-icon { display: none; }
+
+/* ---------- панель навигации ---------- */
+#toolbar {
+  display: flex; align-items: center; gap: 6px;
+  height: var(--k-bar-h);
+  padding: 0 8px 0 6px;
+  background: var(--bar-bg);
+}
+#nav { display: flex; align-items: center; gap: 2px; }
+
+#omnibox {
+  position: relative; flex: 1 1 auto; min-width: 120px;
+  display: flex; align-items: center;
+  height: calc(var(--k-bar-h) - 8px);
+  padding: 0 4px 0 4px;
+  border-radius: var(--k-radius-pill);
+  background: var(--omni-bg);
+  border: 1px solid transparent;
+  transition: background-color var(--k-dur-fast) var(--k-ease), border-color var(--k-dur-fast) var(--k-ease);
+}
+#omnibox:hover { background: var(--omni-hover); }
+#omnibox.focused { background: var(--omni-bg); border-color: var(--k-accent); box-shadow: 0 0 0 3px var(--k-accent-faint); }
+#omnibox.crashed:not(.focused) { border-color: color-mix(in srgb, var(--k-danger) 45%, transparent); }
+
+.omni-chip {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  height: calc(var(--k-bar-h) - 16px); min-width: calc(var(--k-bar-h) - 16px);
+  padding: 0 6px; margin-right: 2px;
+  border-radius: var(--k-radius-pill);
+  color: var(--k-text-dim);
+  font-size: var(--k-fs-sm); white-space: nowrap;
+  justify-content: center;
+}
+.omni-chip:hover { background: var(--k-surface-active); color: var(--k-text); }
+.omni-chip .omni-chip-label { padding-right: 2px; }
+.omni-chip[data-kind="insecure"] { color: var(--k-warn); }
+.omni-chip[data-kind="crashed"] { color: var(--k-danger); }
+.omni-chip[data-kind="internal"] { color: var(--k-accent-text); }
+.omni-chip[data-kind="internal"] .omni-chip-label { color: var(--k-text); }
+#omnibox.focused .omni-chip-label { display: none; }
+
+.omni-field { position: relative; flex: 1 1 auto; min-width: 0; height: 100%; }
+#omni-input {
+  position: absolute; inset: 0; width: 100%;
+  border: 0; outline: 0; background: transparent;
+  padding: 0 6px 0 4px;
+  font-size: calc(var(--k-fs) + 0.5px);
+  color: var(--k-text);
+  user-select: text;
+  caret-color: var(--k-accent);
+}
+#omni-input::placeholder { color: var(--k-text-faint); }
+#omni-input::selection { background: var(--k-selection); }
+.omni-display {
+  position: absolute; inset: 0;
+  display: flex; align-items: center;
+  padding: 0 6px 0 4px;
+  font-size: calc(var(--k-fs) + 0.5px);
+  white-space: pre; overflow: hidden;
+  pointer-events: none;
+  color: var(--k-text-faint);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.omni-display .h { color: var(--k-text); }
+.omni-display .s { color: var(--k-text-faint); }
+.omni-display .s.bad { color: var(--k-danger); text-decoration: line-through; }
+#omnibox:not(.focused).has-display #omni-input { color: transparent; }
+#omnibox.focused .omni-display, #omnibox:not(.has-display) .omni-display { display: none; }
+
+#slot-omnibox-right { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+#slot-omnibox-right .k-icon-btn { width: calc(var(--k-bar-h) - 14px); height: calc(var(--k-bar-h) - 14px); border-radius: var(--k-radius-pill); }
+.omni-zoom {
+  height: calc(var(--k-bar-h) - 16px); padding: 0 8px; border-radius: var(--k-radius-pill);
+  font-size: var(--k-fs-xs); font-weight: 600; color: var(--k-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.omni-zoom:hover { background: var(--k-surface-active); color: var(--k-text); }
+
+#slot-toolbar-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.tb-sep { width: 1px; height: 18px; background: var(--k-border-strong); margin: 0 4px; flex-shrink: 0; }
+
+/* ---------- полосы ---------- */
+#slot-bars { display: flex; flex-direction: column; }
+#slot-bars:empty { display: none; }
+.k-chrome-bar {
+  display: flex; align-items: center; gap: 6px;
+  min-height: var(--k-bm-h);
+  padding: 0 8px;
+  border-top: 1px solid var(--k-border);
+  background: var(--bar-bg);
+  font-size: var(--k-fs-sm);
+}
+
+/* поиск по странице */
+.find-bar { justify-content: flex-end; gap: 4px; padding: 3px 8px; }
+.find-bar .find-box {
+  display: flex; align-items: center; gap: 6px;
+  width: min(420px, 100%);
+  height: calc(var(--k-bm-h) - 2px);
+  padding: 0 4px 0 10px;
+  border-radius: var(--k-radius);
+  background: var(--omni-bg);
+  border: 1px solid var(--k-border);
+}
+.find-bar .find-box:focus-within { border-color: var(--k-accent); background: var(--omni-bg); }
+.find-bar input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; height: 100%; user-select: text; }
+.find-bar .find-count { color: var(--k-text-faint); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: var(--k-fs-xs); }
+.find-bar .find-count.none { color: var(--k-danger); }
+.find-bar .k-icon-btn { width: 22px; height: 22px; border-radius: var(--k-radius-sm); }
+
+/* вкладка упала */
+.crash-bar { background: var(--k-danger-soft); color: var(--k-text); padding: 4px 10px; gap: 10px; }
+.crash-bar > span > .k-ic { color: var(--k-danger); }
+.crash-bar .crash-text { flex: 1; min-width: 0; }
+.crash-bar .crash-text b { font-weight: 600; margin-right: 6px; }

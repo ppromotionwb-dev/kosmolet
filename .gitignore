@@ -1,0 +1,6 @@
+node_modules/
+.profiles/
+tools/selftest-out/
+tools/dev-out/
+claude-inbox/
+*.log

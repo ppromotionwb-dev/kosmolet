@@ -1,0 +1,194 @@
+/* Космолёт — дизайн-токены.
+   Владелец: core (переменные). Фича themes может добавлять пресеты/переопределения.
+   Все цвета интерфейса берутся только отсюда. Акцент задаётся инлайном на <html> (theme.js),
+   производные цвета акцента считаются от него через color-mix. */
+
+:root {
+  /* типографика */
+  --k-font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --k-mono: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  --k-fs: 13px;
+  --k-fs-xs: calc(var(--k-fs) - 2px);
+  --k-fs-sm: calc(var(--k-fs) - 1px);
+  --k-fs-lg: calc(var(--k-fs) + 2px);
+  --k-fs-xl: calc(var(--k-fs) + 7px);
+  --k-lh: 1.45;
+
+  /* геометрия */
+  --k-radius: 8px;
+  --k-radius-sm: 6px;
+  --k-radius-lg: 10px;
+  --k-radius-pill: 999px;
+  --k-tab-h: 38px;          /* полоса вкладок */
+  --k-bar-h: 40px;          /* панель навигации */
+  --k-bm-h: 30px;           /* полоса закладок и прочие полосы */
+  --k-panel-head-h: 36px;   /* шапка правой панели — фиксирована (main кладёт DevTools ниже) */
+  --k-ctl-h: 30px;          /* высота полей и кнопок */
+  --k-ctl-h-sm: 24px;
+  --k-icon-btn: 28px;
+  --k-gap: 8px;
+  --k-pad: 12px;
+
+  /* движение */
+  --k-dur-fast: 120ms;
+  --k-dur: 150ms;
+  --k-dur-slow: 180ms;
+  --k-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* акцент и производные */
+  --k-accent: #7c6cff;
+  --k-on-accent: #ffffff;
+}
+
+/* --- цвета: тема cosmos (по умолчанию) ---
+   [data-theme-preview="<id>"] — та же палитра на любом элементе (превью тем в настройках):
+   все превью сначала получают cosmos, затем свой пресет (он ниже по файлу). */
+:root, [data-theme-preview] {
+  color-scheme: dark;
+  --k-bg-sunken: #0b0d13;
+  --k-bg: #12141c;
+  --k-bg-elev: #1a1d28;
+  --k-surface: #1e2130;
+  --k-surface-hover: #262a3b;
+  --k-surface-active: #2e3346;
+  --k-border: rgba(160, 172, 230, 0.09);
+  --k-border-strong: rgba(160, 172, 230, 0.18);
+  --k-text: #e5e7f0;
+  --k-text-dim: #a0a5ba;
+  --k-text-faint: #686e86;
+  --k-ok: #43c98a;
+  --k-warn: #e9b04f;
+  --k-danger: #ef6b6b;
+  --k-shadow: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.30);
+  --k-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --k-shadow-pop: 0 3px 6px rgba(0, 0, 0, 0.42), 0 0 1px rgba(0, 0, 0, 0.6); /* помещается в 8px поля overlay */
+  --k-backdrop: rgba(4, 5, 10, 0.55);
+  --k-scrollbar: rgba(160, 172, 230, 0.16);
+  --k-scrollbar-hover: rgba(160, 172, 230, 0.28);
+
+  --k-accent-hover: color-mix(in oklab, var(--k-accent), white 14%);
+  --k-accent-soft: color-mix(in srgb, var(--k-accent) 20%, transparent);
+  --k-accent-faint: color-mix(in srgb, var(--k-accent) 10%, transparent);
+  --k-accent-text: color-mix(in oklab, var(--k-accent), white 28%);
+  --k-focus: color-mix(in srgb, var(--k-accent) 65%, transparent);
+  --k-selection: color-mix(in srgb, var(--k-accent) 35%, transparent);
+  --k-ok-soft: color-mix(in srgb, var(--k-ok) 16%, transparent);
+  --k-warn-soft: color-mix(in srgb, var(--k-warn) 16%, transparent);
+  --k-danger-soft: color-mix(in srgb, var(--k-danger) 16%, transparent);
+}
+
+/* graphite — нейтральный тёмно-серый без синевы */
+:root[data-theme="graphite"], [data-theme-preview="graphite"] {
+  --k-bg-sunken: #0f0f11;
+  --k-bg: #18181b;
+  --k-bg-elev: #202023;
+  --k-surface: #252528;
+  --k-surface-hover: #2e2e32;
+  --k-surface-active: #37373c;
+  --k-border: rgba(255, 255, 255, 0.08);
+  --k-border-strong: rgba(255, 255, 255, 0.15);
+  --k-text: #e8e8ea;
+  --k-text-dim: #a4a4aa;
+  --k-text-faint: #6d6d74;
+  --k-scrollbar: rgba(255, 255, 255, 0.14);
+  --k-scrollbar-hover: rgba(255, 255, 255, 0.26);
+  --k-backdrop: rgba(0, 0, 0, 0.55);
+}
+
+/* light — светлая */
+:root[data-theme="light"], [data-theme-preview="light"] {
+  color-scheme: light;
+  --k-bg-sunken: #e5e8ef;
+  --k-bg: #f9fafb;
+  --k-bg-elev: #ffffff;
+  --k-surface: #eef0f4;
+  --k-surface-hover: #e3e6ed;
+  --k-surface-active: #d9dde6;
+  --k-border: rgba(20, 26, 46, 0.10);
+  --k-border-strong: rgba(20, 26, 46, 0.18);
+  --k-text: #1a1c24;
+  --k-text-dim: #545a6b;
+  --k-text-faint: #8a8f9f;
+  --k-ok: #1d9a62;
+  --k-warn: #b7791f;
+  --k-danger: #d64545;
+  --k-shadow: 0 12px 30px rgba(20, 26, 46, 0.14), 0 2px 8px rgba(20, 26, 46, 0.08);
+  --k-shadow-sm: 0 1px 4px rgba(20, 26, 46, 0.10);
+  --k-shadow-pop: 0 3px 6px rgba(20, 26, 46, 0.14), 0 0 1px rgba(20, 26, 46, 0.28);
+  --k-backdrop: rgba(20, 26, 46, 0.28);
+  --k-scrollbar: rgba(20, 26, 46, 0.18);
+  --k-scrollbar-hover: rgba(20, 26, 46, 0.32);
+  --k-accent-hover: color-mix(in oklab, var(--k-accent), black 10%);
+  --k-accent-soft: color-mix(in srgb, var(--k-accent) 14%, transparent);
+  --k-accent-faint: color-mix(in srgb, var(--k-accent) 7%, transparent);
+  --k-accent-text: color-mix(in oklab, var(--k-accent), black 18%);
+  --k-selection: color-mix(in srgb, var(--k-accent) 24%, transparent);
+}
+
+/* terminal — почти чёрный, зеленоватый текст, моноширинный интерфейс */
+:root[data-theme="terminal"], [data-theme-preview="terminal"] {
+  --k-font: var(--k-mono);
+  --k-bg-sunken: #040705;
+  --k-bg: #090e0b;
+  --k-bg-elev: #0e1511;
+  --k-surface: #121b16;
+  --k-surface-hover: #19251e;
+  --k-surface-active: #203026;
+  --k-border: rgba(120, 255, 170, 0.09);
+  --k-border-strong: rgba(120, 255, 170, 0.18);
+  --k-text: #cfe9d6;
+  --k-text-dim: #86a891;
+  --k-text-faint: #56705f;
+  --k-ok: #5be08a;
+  --k-scrollbar: rgba(120, 255, 170, 0.14);
+  --k-scrollbar-hover: rgba(120, 255, 170, 0.26);
+  --k-backdrop: rgba(0, 0, 0, 0.6);
+  --k-radius: 6px;
+  --k-radius-sm: 4px;
+  --k-radius-lg: 8px;
+}
+
+/* custom — основа задаётся инлайном (--k-bg, --k-surface, --k-text из settings.ui.custom),
+   остальное выводится из них. data-scheme ставит theme.js по яркости фона. */
+:root[data-theme="custom"] {
+  --k-bg-sunken: color-mix(in oklab, var(--k-bg), black 30%);
+  --k-bg-elev: color-mix(in oklab, var(--k-bg), var(--k-surface) 50%);
+  --k-surface-hover: color-mix(in oklab, var(--k-surface), var(--k-text) 7%);
+  --k-surface-active: color-mix(in oklab, var(--k-surface), var(--k-text) 13%);
+  --k-border: color-mix(in srgb, var(--k-text) 10%, transparent);
+  --k-border-strong: color-mix(in srgb, var(--k-text) 19%, transparent);
+  --k-text-dim: color-mix(in oklab, var(--k-text), var(--k-bg) 32%);
+  --k-text-faint: color-mix(in oklab, var(--k-text), var(--k-bg) 55%);
+  --k-scrollbar: color-mix(in srgb, var(--k-text) 16%, transparent);
+  --k-scrollbar-hover: color-mix(in srgb, var(--k-text) 28%, transparent);
+}
+:root[data-theme="custom"][data-scheme="light"] {
+  color-scheme: light;
+  --k-bg-sunken: color-mix(in oklab, var(--k-bg), black 8%);
+  --k-shadow: 0 12px 30px rgba(20, 26, 46, 0.14), 0 2px 8px rgba(20, 26, 46, 0.08);
+  --k-shadow-sm: 0 1px 4px rgba(20, 26, 46, 0.10);
+  --k-shadow-pop: 0 3px 6px rgba(20, 26, 46, 0.14), 0 0 1px rgba(20, 26, 46, 0.28);
+  --k-backdrop: rgba(20, 26, 46, 0.28);
+  --k-accent-hover: color-mix(in oklab, var(--k-accent), black 10%);
+  --k-accent-text: color-mix(in oklab, var(--k-accent), black 18%);
+}
+
+/* плотность */
+:root[data-density="compact"] {
+  --k-tab-h: 32px;
+  --k-bar-h: 34px;
+  --k-bm-h: 26px;
+  --k-ctl-h: 26px;
+  --k-ctl-h-sm: 22px;
+  --k-icon-btn: 26px;
+  --k-gap: 6px;
+  --k-pad: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --k-dur-fast: 0ms;
+    --k-dur: 0ms;
+    --k-dur-slow: 0ms;
+  }
+}

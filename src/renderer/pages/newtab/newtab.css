@@ -1,0 +1,25 @@
+/* Новая вкладка — заглушка core (владелец страницы: ux-chrome). */
+html, body { height: 100%; background: var(--k-bg); }
+body { display: flex; justify-content: center; }
+.nt { width: 100%; max-width: 640px; padding: 22vh 24px 40px; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+.nt-logo { color: var(--k-accent-text); opacity: 0.9; }
+.nt-search {
+  position: relative; width: 100%;
+  display: flex; align-items: center;
+  height: 48px; border-radius: 24px;
+  background: var(--k-surface);
+  border: 1px solid var(--k-border);
+  box-shadow: var(--k-shadow-sm);
+  transition: border-color var(--k-dur-fast) var(--k-ease), background-color var(--k-dur-fast) var(--k-ease);
+}
+.nt-search:hover { background: var(--k-surface-hover); }
+.nt-search:focus-within { border-color: var(--k-accent); background: var(--k-bg-elev); box-shadow: 0 0 0 4px var(--k-accent-faint); }
+.nt-search-icon { position: absolute; left: 18px; color: var(--k-text-faint); }
+.nt-search input {
+  width: 100%; height: 100%; padding: 0 20px 0 48px;
+  border: 0; outline: 0; background: transparent;
+  font-size: calc(var(--k-fs) + 3px); color: var(--k-text);
+  caret-color: var(--k-accent);
+}
+.nt-search input::placeholder { color: var(--k-text-faint); }
+.nt-hint { color: var(--k-text-faint); font-size: var(--k-fs-sm); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }

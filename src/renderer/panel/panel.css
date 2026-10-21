@@ -1,0 +1,71 @@
+/* Космолёт — правая панель инструментов. Владелец: core.
+   Шапка ровно 36px: main кладёт DevTools-вид сразу под ней. */
+
+html, body { height: 100%; overflow: hidden; background: var(--k-bg); }
+#panel {
+  position: relative; height: 100%;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--k-border-strong);
+}
+:root.resizing, :root.resizing * { cursor: ew-resize !important; user-select: none !important; }
+
+#resizer {
+  position: absolute; left: -1px; top: 0; bottom: 0; width: 5px; z-index: 10;
+  cursor: ew-resize;
+  touch-action: none;
+}
+#resizer::after {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--k-accent);
+  opacity: 0; transition: opacity var(--k-dur-fast) var(--k-ease);
+}
+#resizer:hover::after, :root.resizing #resizer::after { opacity: 0.7; }
+
+#head {
+  flex: 0 0 var(--k-panel-head-h);
+  height: var(--k-panel-head-h);
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 4px 0 6px;
+  background: var(--k-bg-sunken);
+  border-bottom: 1px solid var(--k-border);
+  user-select: none;
+}
+#tool-tabs {
+  display: flex; align-items: center; gap: 1px;
+  height: 100%; min-width: 0; flex: 0 1 auto;
+  overflow-x: auto; overflow-y: hidden;
+  scrollbar-width: none;
+}
+#tool-tabs::-webkit-scrollbar { display: none; }
+.tool-tab {
+  position: relative; flex-shrink: 0;
+  width: 30px; height: 100%;
+  display: grid; place-items: center;
+  color: var(--k-text-faint);
+  transition: color var(--k-dur-fast) var(--k-ease);
+}
+.tool-tab::before {
+  content: ""; position: absolute; inset: 5px 2px; border-radius: var(--k-radius-sm);
+  background: var(--k-surface-hover); opacity: 0;
+  transition: opacity var(--k-dur-fast) var(--k-ease);
+}
+.tool-tab:hover { color: var(--k-text); }
+.tool-tab:hover::before { opacity: 1; }
+.tool-tab .k-ic { position: relative; }
+.tool-tab[aria-selected="true"] { color: var(--k-accent-text); }
+.tool-tab[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 7px; right: 7px; bottom: 0; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--k-accent);
+}
+#tool-title {
+  flex: 1 1 auto; min-width: 0;
+  padding-left: 6px;
+  color: var(--k-text-dim); font-size: var(--k-fs-sm); font-weight: 600;
+}
+#panel-close { width: 26px; height: 26px; }
+
+#body { position: relative; flex: 1 1 auto; min-height: 0; }
+.tool-body { position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain; }
+.tool-body[hidden] { display: none; }
+/* под DevTools-видом — пусто */
+#body.devtools { background: var(--k-bg); }
