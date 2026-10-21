@@ -91,6 +91,18 @@ function createCommands(ctx) {
   const commands = new Map();
   const bindings = new Map(); // combo → [id]
   const attached = new WeakSet();
+  // Фича может оставить клавишу странице вместо команды (терминал в панели: Ctrl+R, Ctrl+L, Ctrl+W…):
+  // addBypass((input, source, wc, cmd) => true) — команда не выполняется, клавиша уходит в webContents.
+  const bypasses = [];
+  function addBypass(fn) {
+    if (typeof fn !== 'function') return () => {};
+    bypasses.push(fn);
+    return () => { const i = bypasses.indexOf(fn); if (i >= 0) bypasses.splice(i, 1); };
+  }
+  function bypassed(input, source, wc, c) {
+    for (const fn of bypasses) { try { if (fn(input, source, wc, c)) return true; } catch (_) { /* фича упала — не мешаем */ } }
+    return false;
+  }
 
   function rebuildBindings() {
     bindings.clear();
@@ -173,6 +185,7 @@ function createCommands(ctx) {
     wc.on('before-input-event', (event, input) => {
       const c = match(input, source);
       if (!c) return;
+      if (bypasses.length && bypassed(input, source, wc, c)) return;
       if (!c.passThrough) event.preventDefault();
       if (input.isAutoRepeat && !c.repeat) return;
       const args = Object.assign({ source, webContents: wc, combo: comboFromInput(input) }, extra || {});
@@ -356,7 +369,7 @@ function createCommands(ctx) {
   }
 
   return {
-    register, unregister, run, list, attach, match,
+    register, unregister, run, list, attach, match, addBypass,
     get: (id) => commands.get(id) || null,
     registerBase,
     appMenuTemplate,
