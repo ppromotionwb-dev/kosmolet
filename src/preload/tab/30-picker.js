@@ -133,18 +133,31 @@ function xpathFor(el) {
   return '/' + parts.join('/');
 }
 
+// Тёмная тема браузера (Dark Reader) перекрашивает страницу и добавляет свои атрибуты — это не вёрстка сайта.
+function darkThemed() {
+  try { return !!document.querySelector('style.darkreader, meta[name="darkreader"]') || document.documentElement.hasAttribute('data-darkreader-mode'); } catch (_) { return false; }
+}
+function stripDark(html) {
+  return String(html).replace(/\s+data-darkreader-[\w-]+="[^"]*"/gi, '').replace(/\s*--darkreader-[\w-]+\s*:[^;"]*;?/gi, '');
+}
+
 function describe(el) {
   const attrs = {};
   let count = 0;
   for (const a of Array.from(el.attributes || [])) {
+    if (/^data-darkreader-/i.test(a.name)) continue;
     if (count++ >= 40) break;
-    attrs[a.name] = a.value.length > 500 ? a.value.slice(0, 500) + '…' : a.value;
+    const v = a.name === 'style' ? stripDark(a.value).trim() : a.value;
+    if (a.name === 'style' && !v) continue;
+    attrs[a.name] = v.length > 500 ? v.slice(0, 500) + '…' : v;
   }
   let text = '';
   try { text = el.innerText; } catch (_) { text = ''; }
   if (!text) text = el.textContent || '';
   text = norm(text);
+  const themed = darkThemed();
   let html = el.outerHTML || '';
+  if (themed) html = stripDark(html);
   const styles = {};
   let cs = null;
   try { cs = getComputedStyle(el); } catch (_) { cs = null; }
@@ -164,6 +177,7 @@ function describe(el) {
     value,
     inShadow: el.getRootNode() !== el.ownerDocument,
     inFrame: el.ownerDocument !== document,
+    themed,
     url: location.href,
     title: document.title,
   };
@@ -308,7 +322,11 @@ window.addEventListener('pagehide', () => { if (active) { const id = active.id; 
 ipc.on('kosmo-tab:picker.start', (_e, p) => start(p || {}));
 ipc.on('kosmo-tab:picker.stop', () => stop());
 ipc.on('kosmo-tab:picker.at', (_e, p) => {
-  const x = Number(p && p.x), y = Number(p && p.y);
+  let x = Number(p && p.x), y = Number(p && p.y);
+  // координаты от main — CSS px окна; при масштабе страницы (pinch, мобильная вёрстка без meta viewport)
+  // переводим в координаты layout viewport, как clientX
+  const vv = window.visualViewport;
+  if (vv && vv.scale > 0 && (vv.scale !== 1 || vv.offsetLeft || vv.offsetTop)) { x = x / vv.scale + vv.offsetLeft; y = y / vv.scale + vv.offsetTop; }
   const el = isFinite(x) && isFinite(y) ? deepAt(x, y) : null;
   if (!el) { send({ id: p && p.id, error: 'element not found' }); return; }
   let data;

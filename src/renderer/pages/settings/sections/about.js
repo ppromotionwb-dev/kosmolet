@@ -1,7 +1,7 @@
 // Владелец: tools-pack (база — core). «О Космолёте»: версии, папки профиля и Claude с кнопками «Открыть папку», лицензии.
 'use strict';
 KSettings.section({
-  id: 'about', title: 'О Космолёте', icon: 'orbit', order: 100,
+  id: 'about', title: 'О Космолёте', icon: 'kosmolet', order: 100,
   keywords: 'версия electron chromium node о программе профиль папка данные лицензии inbox',
   render(el, api) {
     const U = window.KUI;

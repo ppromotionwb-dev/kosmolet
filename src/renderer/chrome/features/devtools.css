@@ -1,4 +1,6 @@
 /* Владелец: devtools. Сцена эмуляции устройства в chrome и значок в адресной строке. */
+#slot-omnibox-right .kdt-emu.on { color: var(--k-accent-text); background: transparent; }
+#slot-omnibox-right .kdt-emu.on:hover { background: var(--k-accent-faint); }
 #kdt-stage { position: fixed; z-index: 0; pointer-events: none; display: none; }
 #kdt-stage.on { display: block; }
 #kdt-stage .kdt-frame {

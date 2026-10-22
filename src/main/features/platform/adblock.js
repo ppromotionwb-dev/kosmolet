@@ -149,7 +149,8 @@ function createAdblock(ctx) {
     const rec = { preloadId: null };
     try {
       ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
-      ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'] }, onHeadersReceived);
+      // CSP из фильтров нужен только документам и фреймам: остальные ответы не ждут main.
+      ses.webRequest.onHeadersReceived({ urls: ['<all_urls>'], types: ['mainFrame', 'subFrame'] }, onHeadersReceived);
       if (preloadPath) rec.preloadId = ses.registerPreloadScript({ type: 'frame', id: COSMETIC_PRELOAD_ID, filePath: preloadPath });
     } catch (e) { log('не подключился к сессии:', errText(e)); }
     attached.set(ses, rec);
@@ -191,7 +192,9 @@ function createAdblock(ctx) {
     const t0 = Date.now();
     lib = require('@ghostery/adblocker-electron');
     log(`библиотека за ${Date.now() - t0} мс`);
-    try { preloadPath = require.resolve('@ghostery/adblocker-electron-preload'); } catch (e) { preloadPath = null; log('нет preload косметики:', errText(e)); }
+    // Своя копия preload косметики (без слушателя unload: он давал сайтам ошибку Permissions-Policy с локальным путём).
+    preloadPath = path.join(__dirname, 'adblock-cosmetic-preload.js');
+    if (!fs.existsSync(preloadPath)) { log('нет preload косметики:', preloadPath); preloadPath = null; }
     return lib;
   }
 
@@ -283,9 +286,12 @@ function createAdblock(ctx) {
       if (st && st.size > 0) {
         try {
           const buf = await fs.promises.readFile(file);
+          await new Promise((r) => setImmediate(r)); // разбор — отдельной задачей main, не вслед за чтением
+          const t1 = Date.now();
           const eng = lib.ElectronBlocker.deserialize(new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength));
+          const tDeser = Date.now() - t1;
           setEngine(eng, { updatedAt: st.mtimeMs, size: st.size, source: 'cache' });
-          log(`движок из кэша за ${Date.now() - t0} мс (${Math.round(st.size / 1024)} КБ, от ${new Date(st.mtimeMs).toLocaleDateString('ru-RU')})`);
+          log(`движок из кэша за ${Date.now() - t0} мс, разбор ${tDeser} мс (${Math.round(st.size / 1024)} КБ, от ${new Date(st.mtimeMs).toLocaleDateString('ru-RU')})`);
           if (Date.now() - st.mtimeMs > WEEK) update('старше 7 дней');
           return;
         } catch (e) {

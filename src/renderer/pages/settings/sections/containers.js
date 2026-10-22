@@ -21,7 +21,8 @@
       const listEl = h('div.kc-list');
       const addBtn = h('button.k-btn.k-btn-sm.k-btn-primary', { type: 'button' }, U.icon('plus', 14), 'Добавить контейнер');
       const anchor = (text) => h('div.ks-row', { hidden: true, dataset: { search: text } });
-      el.appendChild(ui.group('Контейнеры', ui.free(listEl), ui.free(h('div.kc-foot', h('span.k-faint', 'Открыть в контейнере — правый клик по ссылке или вкладке, а также меню «⋯» → «Новая вкладка в контейнере».'), addBtn)),
+      // без подписи группы: заголовок страницы уже «Контейнеры»
+      el.appendChild(ui.group(null, ui.free(listEl), ui.free(h('div.kc-foot', h('span.k-faint', 'Открыть в контейнере — правый клик по ссылке или вкладке, а также меню «⋯» → «Новая вкладка в контейнере».'), addBtn)),
         anchor('контейнеры добавить переименовать цвет удалить очистить данные')));
 
       let counts = {};
@@ -85,7 +86,7 @@
       function row(c) {
         const n = counts[c.id] || 0;
         const isMain = c.id === 'main';
-        const color = h('button.kc-color', { type: 'button', title: 'Цвет', 'aria-label': 'Цвет контейнера', style: { '--kc': c.color }, 'aria-expanded': openMenu === c.id ? 'true' : 'false' });
+        const color = h('button.kc-color', { type: 'button', title: 'Сменить цвет', 'aria-label': 'Сменить цвет контейнера', style: { '--kc': c.color }, 'aria-expanded': openMenu === c.id ? 'true' : 'false' });
         color.addEventListener('click', () => { openMenu = openMenu === c.id ? null : c.id; confirm = null; render(); });
         const name = h('input.k-input.kc-name', { type: 'text', value: c.name, maxlength: '40', spellcheck: 'false', 'aria-label': 'Название контейнера' });
         let committed = false;
@@ -117,15 +118,19 @@
           no.addEventListener('click', () => { confirm = null; render(); });
           actions.append(h('span.kc-confirm', text), no, yes);
         } else {
-          const tab = h('button.k-icon-btn', { type: 'button', title: 'Новая вкладка в контейнере', 'aria-label': 'Новая вкладка в контейнере', disabled: isBusy, html: window.KIcons.get('plus', 16) });
+          // действия подписаны словами: значки «+», печенька и корзина без подписей были непонятны
+          const tab = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Открыть новую вкладку в этом контейнере', disabled: isBusy }, U.icon('plus', 14), 'Новая вкладка');
           tab.addEventListener('click', () => api.invoke('kosmo:containers.newTab', { id: c.id }).catch((e) => api.toast(clean(e), { tone: 'danger' })));
-          const clear = h('button.k-icon-btn', { type: 'button', title: 'Очистить данные контейнера', 'aria-label': 'Очистить данные', disabled: isBusy, html: window.KIcons.get('cookie', 16) });
+          const clear = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Удалить cookies, вход на сайты и кэш этого контейнера', disabled: isBusy }, 'Очистить данные…');
           clear.addEventListener('click', () => { confirm = { id: c.id, kind: 'clear' }; openMenu = null; render(); });
           actions.append(tab, clear);
           if (!isMain) {
-            const del = h('button.k-icon-btn.kc-del', { type: 'button', title: 'Удалить контейнер', 'aria-label': 'Удалить контейнер', disabled: isBusy, html: window.KIcons.get('trash', 16) });
+            const del = h('button.k-btn.k-btn-sm.k-btn-ghost.kc-del', { type: 'button', title: 'Удалить контейнер вместе с его данными', disabled: isBusy }, 'Удалить…');
             del.addEventListener('click', () => { confirm = { id: c.id, kind: 'remove' }; openMenu = null; render(); });
             actions.appendChild(del);
+          } else {
+            // место под «Удалить…», чтобы кнопки строк стояли столбцами
+            actions.appendChild(h('span.k-btn.k-btn-sm.k-btn-ghost.kc-del-gap', { 'aria-hidden': 'true' }, 'Удалить…'));
           }
         }
         const top = h('div.kc-row' + (isBusy ? '.busy' : ''), { dataset: { id: c.id } }, color, h('div.kc-main', name, h('div.kc-sub', meta, tags)), actions);

@@ -19,15 +19,11 @@
       const st = { data: data || {}, s: null, seq: 0, busy: false };
       root.classList.add('kpo-pop');
 
+      // Шапка как у поповера «Тёмная тема»: переключатель справа — для ЭТОГО сайта. Общее выключение — в подвале.
       const ic = h('span.kpo-ic', U.icon('shield', 18));
       const sub = h('div.kpo-sub.k-ellipsis');
-      const global = h('input.k-switch', { type: 'checkbox', 'aria-label': 'Блокировщик рекламы' });
-      const head = h('div.kpo-head', ic, h('div.kpo-head-text', h('div.kpo-title', 'Блокировщик рекламы'), sub), global);
-
       const siteSw = h('input.k-switch', { type: 'checkbox', 'aria-label': 'Блокировка на этом сайте' });
-      const siteLabel = h('div.kpo-row-label');
-      const siteHint = h('div.kpo-row-hint');
-      const siteRow = h('label.kpo-row', h('div.kpo-row-text', siteLabel, siteHint), siteSw);
+      const head = h('div.kpo-head', ic, h('div.kpo-head-text', h('div.kpo-title', 'Блокировщик рекламы'), sub), siteSw);
 
       const numPage = h('div.kpo-num');
       const numTotal = h('div.kpo-num');
@@ -38,11 +34,13 @@
       const note = h('div.kpo-note', { hidden: true });
       const settingsBtn = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button' }, U.icon('settings', 14), 'Исключения и настройки');
       settingsBtn.addEventListener('click', () => { api.invoke('kosmo:tabs.create', { url: 'kosmo://settings/#privacy' }).catch(() => {}); api.close(); });
-      const foot = h('div.kpo-foot', settingsBtn);
-      root.append(head, siteRow, stats, note, foot);
+      const globalBtn = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button' });
+      const foot = h('div.kpo-foot', settingsBtn, h('span.k-grow'), globalBtn);
+      root.append(head, stats, note, foot);
 
-      global.addEventListener('change', () => {
-        api.invoke('kosmo:adblock.setEnabled', { value: global.checked }).then(() => load()).catch(err);
+      globalBtn.addEventListener('click', () => {
+        if (!st.s) return;
+        api.invoke('kosmo:adblock.setEnabled', { value: !st.s.enabled }).then(() => load()).catch(err);
       });
       siteSw.addEventListener('change', () => {
         if (!st.s || !st.s.host) return;
@@ -58,23 +56,24 @@
         if (!s) return;
         st.s = s;
         const site = (s.siteKey || s.host || '').replace(/^www\./, '');
-        sub.textContent = !s.enabled ? 'Выключен везде' : !s.ready ? (s.error ? 'Списки фильтров не загрузились' : 'Загружаю списки фильтров…') : (s.active ? 'Работает на этом сайте' : 'Сайт в исключениях');
-        global.checked = !!s.enabled;
+        sub.textContent = !s.enabled ? 'Выключен на всех сайтах' : !s.host ? 'Недоступен на этой странице' : site;
+        sub.title = s.host || '';
+        siteSw.checked = !!(s.enabled && s.host && !s.allowed);
+        siteSw.disabled = !s.enabled || !s.host || st.busy;
+        siteSw.title = !s.enabled ? 'Блокировщик выключен на всех сайтах — включите его в подвале' : 'Блокировка на ' + site + ' (страница обновится)';
         root.classList.toggle('off', !s.active);
         U.clear(ic).appendChild(U.icon(s.active ? 'shield' : 'shield-off', 18));
-        siteRow.hidden = !s.host;
-        siteLabel.textContent = 'Блокировка на ' + site;
-        siteSw.checked = !s.allowed;
-        siteSw.disabled = !s.enabled || st.busy;
-        siteHint.textContent = s.allowed
-          ? (s.allowEntry && s.allowEntry !== site ? 'В исключениях как ' + s.allowEntry + ' — сайт не фильтруется' : 'Сайт не фильтруется: реклама и трекеры не режутся')
-          : 'Страница обновится после переключения';
         numPage.textContent = nf.format(s.blocked || 0);
         numTotal.textContent = nf.format(s.total || 0);
         stats.classList.toggle('dim', !s.active);
+        globalBtn.textContent = s.enabled ? 'Выключить везде' : 'Включить везде';
+        globalBtn.classList.toggle('k-btn-ghost', !!s.enabled);
+        globalBtn.classList.toggle('k-btn-primary', !s.enabled);
         let n = '';
         if (s.enabled && !s.ready && s.error) n = 'Ошибка загрузки списков: ' + s.error + '. Попробую ещё раз через полчаса.';
         else if (s.enabled && !s.ready) n = 'Первый запуск: списки скачиваются в фоне, это займёт несколько секунд.';
+        else if (s.enabled && s.allowed) n = s.allowEntry && s.allowEntry !== site ? 'В исключениях как ' + s.allowEntry + ': реклама и трекеры здесь не режутся.' : 'Сайт в исключениях: реклама и трекеры здесь не режутся.';
+        else if (!s.enabled) n = 'Реклама и трекеры не блокируются ни на одном сайте.';
         note.textContent = n;
         note.hidden = !n;
         api.resize();
@@ -142,10 +141,10 @@
     tabs: 'видеть адреса и заголовки вкладок', storage: 'хранить свои данные', activeTab: 'доступ к текущей вкладке по клику',
     scripting: 'запускать скрипты на страницах', cookies: 'читать и менять cookies', history: 'читать историю',
     bookmarks: 'читать и менять закладки', downloads: 'управлять загрузками', notifications: 'показывать уведомления',
-    contextMenus: 'пункты в контекстном меню', webRequest: 'видеть сетевые запросы', declarativeNetRequest: 'блокировать и менять запросы',
+    contextMenus: 'добавлять пункты в контекстное меню', webRequest: 'видеть сетевые запросы', declarativeNetRequest: 'блокировать и менять запросы',
     clipboardRead: 'читать буфер обмена', clipboardWrite: 'писать в буфер обмена', management: 'управлять расширениями',
     nativeMessaging: 'общаться с программами на компьютере', proxy: 'менять прокси', privacy: 'менять настройки приватности',
-    geolocation: 'знать местоположение', webNavigation: 'видеть переходы по страницам', alarms: 'запускаться по таймеру', unlimitedStorage: 'неограниченное хранилище',
+    geolocation: 'знать местоположение', webNavigation: 'видеть переходы по страницам', alarms: 'запускаться по таймеру', unlimitedStorage: 'хранить данные без ограничения объёма',
     fontSettings: 'менять настройки шрифтов', offscreen: 'работать в фоновом документе', sidePanel: 'открывать боковую панель',
     tabGroups: 'управлять группами вкладок', identity: 'входить через аккаунт Google', webRequestBlocking: 'блокировать запросы',
     declarativeNetRequestWithHostAccess: 'менять запросы на разрешённых сайтах', declarativeNetRequestFeedback: 'видеть, что заблокировано',

@@ -1,6 +1,7 @@
 'use strict';
 // Роутер IPC с проверкой отправителя (ARCHITECTURE §4).
 // kind: 'ui' — chrome/panel/overlay; 'internal' — kosmo://<внутренний хост>/ во вкладке; 'tab' — любая страница вкладки.
+// allow может сузить внутренние страницы до хоста: 'internal:settings' (meta.host — хост страницы).
 
 const { ipcMain } = require('electron');
 const { INTERNAL_HOSTS } = require('./sessions');
@@ -49,6 +50,8 @@ function createIpc(ctx) {
     const mf = wc.mainFrame;
     const isMain = !!(f && mf && f.processId === mf.processId && f.routingId === mf.routingId);
     meta.kind = isMain && isInternalUrl(frameUrl) ? 'internal' : 'tab';
+    // Хост внутренней страницы (settings, history…): для прав по странице — allow: ['internal:settings'].
+    if (meta.kind === 'internal') { const u = parseUrl(frameUrl); meta.host = u ? u.hostname : ''; }
     return meta;
   }
 
@@ -56,6 +59,7 @@ function createIpc(ctx) {
     if (!meta) throw new Error(`IPC ${channel}: неизвестный отправитель`);
     // Внутренняя страница может пользоваться и каналами вкладок.
     if (allow.includes(meta.kind)) return;
+    if (meta.kind === 'internal' && meta.host && allow.includes('internal:' + meta.host)) return;
     if (meta.kind === 'internal' && allow.includes('tab')) return;
     throw new Error(`IPC ${channel}: отказано (${meta.kind})`);
   }

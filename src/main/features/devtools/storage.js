@@ -60,7 +60,8 @@ function createStorage(ctx) {
   // cookies.get({domain}) в Electron не находит поддомены (.www.site.ru) — фильтруем сами
   async function siteCookies(ses, site) {
     const all = await ses.cookies.get({});
-    return all.filter((c) => { const d = String(c.domain || '').toLowerCase().replace(/^./, ''); return d === site || d.endsWith('.' + site); });
+    // точку снимаем только ведущую: у cookie без Domain (hostOnly) домен без точки — «example.com», «127.0.0.1»
+    return all.filter((c) => { const d = String(c.domain || '').toLowerCase().replace(/^\./, ''); return d === site || d.endsWith('.' + site); });
   }
 
   function norm(c, u) {
@@ -193,6 +194,13 @@ function createStorage(ctx) {
     const t = tabCtx(p.tabId);
     if (!t.tab.wc || t.tab.wc.isDestroyed()) throw new Error('вкладка выгружена — откройте её');
     if (!t.web && !(t.u && t.u.protocol === 'file:')) return { unsupported: true, origin: '', items: [] };
+    // Через CDP: executeJavaScriptInIsolatedWorld ждёт конца загрузки страницы (на WB — десятки секунд).
+    if (ctx.cdp && typeof ctx.cdp.evalInWorld === 'function') {
+      try { return await ctx.cdp.evalInWorld(t.tab.id, code, { world: 'kosmolet-storage', timeoutMs: 15000 }); } catch (e) {
+        if (!/отладчик|debugger|attach|выгружена|не найдена/i.test(String(e && e.message))) throw e;
+      }
+    }
+    if (t.tab.wc.isLoadingMainFrame()) throw new Error('страница ещё загружается — откройте инструмент, когда она загрузится');
     return t.tab.wc.executeJavaScriptInIsolatedWorld(WORLD, [{ code }], false);
   }
 

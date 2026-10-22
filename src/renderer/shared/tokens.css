@@ -38,6 +38,8 @@
   /* акцент и производные */
   --k-accent: #7c6cff;
   --k-on-accent: #ffffff;
+  /* заливка основной кнопки: акцент, затемнённый до контраста ≥ 4,5 с --k-on-accent (theme.js считает точно) */
+  --k-accent-fill: color-mix(in oklab, var(--k-accent), black 14%);
 }
 
 /* --- цвета: тема cosmos (по умолчанию) — глубокий синий графит (не чёрный), фиолетовый акцент ---
@@ -57,7 +59,8 @@
   --k-border-strong: rgba(150, 165, 235, 0.19);
   --k-text: #e4e7f2;
   --k-text-dim: #a2a9c4;
-  --k-text-faint: #6a7290;
+  --k-text-faint: #848ca9;  /* ≥ 4,5:1 на surface: подсказки, подписи, пустые состояния */
+  --k-text-ghost: #6a7290;  /* только декор: иконки-подсказки, разделители, «+» в сочетаниях */
   --k-ok: #43c98a;
   --k-warn: #e9b04f;
   --k-danger: #ef6b6b;
@@ -91,7 +94,8 @@
   --k-border-strong: rgba(255, 255, 255, 0.15);
   --k-text: #e8e8ea;
   --k-text-dim: #a4a4aa;
-  --k-text-faint: #6d6d74;
+  --k-text-faint: #8a8a92;
+  --k-text-ghost: #6d6d74;
   --k-scrollbar: rgba(255, 255, 255, 0.14);
   --k-scrollbar-hover: rgba(255, 255, 255, 0.26);
   --k-backdrop: rgba(0, 0, 0, 0.55);
@@ -110,9 +114,10 @@
   --k-border-strong: rgba(20, 26, 46, 0.18);
   --k-text: #1a1c24;
   --k-text-dim: #545a6b;
-  --k-text-faint: #8a8f9f;
+  --k-text-faint: #626777;
+  --k-text-ghost: #8a8f9f;
   --k-ok: #1d9a62;
-  --k-warn: #b7791f;
+  --k-warn: #9a6414;
   --k-danger: #d64545;
   --k-shadow: 0 12px 30px rgba(20, 26, 46, 0.14), 0 2px 8px rgba(20, 26, 46, 0.08);
   --k-shadow-sm: 0 1px 4px rgba(20, 26, 46, 0.10);
@@ -140,7 +145,8 @@
   --k-border-strong: rgba(110, 255, 160, 0.20);
   --k-text: #c8ead2;
   --k-text-dim: #7fa58b;
-  --k-text-faint: #50705b;
+  --k-text-faint: #6a9177;
+  --k-text-ghost: #50705b;
   --k-ok: #5be08a;
   --k-warn: #e6c25a;
   --k-scrollbar: rgba(110, 255, 160, 0.14);
@@ -164,7 +170,8 @@
   --k-border: color-mix(in srgb, var(--k-text) 10%, transparent);
   --k-border-strong: color-mix(in srgb, var(--k-text) 19%, transparent);
   --k-text-dim: color-mix(in oklab, var(--k-text), var(--k-bg) 32%);
-  --k-text-faint: color-mix(in oklab, var(--k-text), var(--k-bg) 55%);
+  --k-text-faint: color-mix(in oklab, var(--k-text), var(--k-bg) 40%);
+  --k-text-ghost: color-mix(in oklab, var(--k-text), var(--k-bg) 55%);
   --k-scrollbar: color-mix(in srgb, var(--k-text) 16%, transparent);
   --k-scrollbar-hover: color-mix(in srgb, var(--k-text) 28%, transparent);
 }

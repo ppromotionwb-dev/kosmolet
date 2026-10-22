@@ -37,12 +37,24 @@ const MAP = {
   'loopback-network': ['local-network'],
 };
 
-// Схемы, которые не отдаём системе ни при каком ответе (либо наши, либо известные векторы атак).
+// Внешние приложения — по белому списку: «Запомнить» есть только для известных безопасных схем (почта, телефон,
+// мессенджеры, созвоны, редакторы кода). Любая другая схема каждый раз спрашивается заново, с полным адресом
+// в полосе, и сохранённое для неё «разрешить» (например, записанное в настройки в обход полосы) не действует.
+const SAFE_SCHEMES = new Set([
+  'mailto', 'tel', 'callto', 'sms', 'sip', 'sips', 'facetime', 'webcal', 'magnet',
+  'tg', 'whatsapp', 'viber', 'skype', 'zoommtg', 'zoomus', 'msteams', 'slack', 'discord',
+  'vscode', 'vscode-insiders', 'cursor', 'jetbrains', 'figma', 'notion', 'spotify',
+]);
+// Второй слой: схемы, которые не отдаём системе ни при каком ответе (либо наши, либо известные векторы атак).
 const BLOCKED_SCHEMES = new Set([
   'http', 'https', 'file', 'javascript', 'vbscript', 'data', 'blob', 'about', 'ftp', 'ws', 'wss', 'kosmo', 'chrome',
   'chrome-extension', 'devtools', 'view-source', 'filesystem', 'ms-msdt', 'search-ms', 'search', 'ms-officecmd',
   'hcp', 'shell', 'mk', 'res', 'its', 'ms-its', 'mhtml', 'ms-cxh', 'ms-cxh-full', 'ms-appinstaller', 'jar',
+  'ms-word', 'ms-excel', 'ms-powerpoint', 'ms-visio', 'ms-access', 'ms-project', 'ms-publisher', 'ms-spd',
+  'ms-infopath', 'ofe', 'ms-search', 'ms-settings', 'ms-windows-store', 'microsoft-edge', 'ldap', 'ldaps', 'smb', 'nfs',
 ]);
+const isSafeScheme = (s) => SAFE_SCHEMES.has(s);
+const URL_SHOW = 300;
 
 function kindInfo(key) {
   if (key.startsWith('external:')) return { key, label: 'открыть приложение «' + key.slice(9) + ':»', icon: 'external-link', external: key.slice(9) };
@@ -131,6 +143,7 @@ function createPermissions(ctx) {
   function publicItem(q) {
     return {
       id: q.id, tabId: q.tabId, origin: q.origin, host: q.host, external: q.external || null,
+      externalUrl: q.external ? String(q.externalUrl || '').slice(0, URL_SHOW) : null,
       kinds: q.kinds.map(kindInfo), remember: q.rememberable !== false, sources: q.sources || null,
     };
   }
@@ -202,10 +215,15 @@ function createPermissions(ctx) {
       const url = String((details && details.externalURL) || '');
       const scheme = keys[0].slice(9);
       if (BLOCKED_SCHEMES.has(scheme)) { log('запрещённая схема:', scheme); return false; }
+      const safe = isSafeScheme(scheme);
       const d = decision(origin, keys[0]);
-      if (d === 'allow') { openExternal(url); return false; }
+      // Сохранённое «разрешить» молча открывает только схемы из белого списка; остальные — каждый раз вопрос.
+      if (d === 'allow' && safe) { openExternal(url); return false; }
       if (d === 'deny' || !info.tab) return false;
-      return enqueue({ tabId: info.tab.id, origin, host: hostOfOrigin(origin), kinds: keys, external: scheme, externalUrl: url }).then(() => false);
+      return enqueue({
+        tabId: info.tab.id, origin, host: hostOfOrigin(origin), kinds: keys, external: scheme, externalUrl: url,
+        rememberable: safe,
+      }).then(() => false);
     }
 
     let unknown = [];

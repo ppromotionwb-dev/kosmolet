@@ -39,6 +39,18 @@
     if (!rgb) return '#ffffff';
     return luminance(rgb) > 0.4 ? '#0e1016' : '#ffffff';
   }
+  // Заливка основной кнопки: при белом тексте затемняем акцент, пока контраст не станет ≥ 4,5 (у #7c6cff белый — 3,9).
+  function accentFill(color) {
+    const rgb = parseColor(color);
+    if (!rgb) return null;
+    if (onAccent(color) !== '#ffffff') return color; // светлый акцент с тёмным текстом — как есть
+    const hex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+    for (const k of [0, 0.04, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.5]) {
+      const m = rgb.map((v) => v * (1 - k));
+      if (1.05 / (luminance(m) + 0.05) >= 4.5) return hex(m);
+    }
+    return hex(rgb.map((v) => v * 0.5));
+  }
   function setVar(name, value) {
     if (value === null || value === undefined || value === '') root.style.removeProperty(name);
     else root.style.setProperty(name, value);
@@ -71,6 +83,7 @@
     root.dataset.density = density;
     setVar('--k-accent', accent);
     setVar('--k-on-accent', accent ? onAccent(accent) : null);
+    setVar('--k-accent-fill', accent ? accentFill(accent) : null);
     setVar('--k-fs', fs >= 10 && fs <= 22 ? fs + 'px' : null);
 
     try { localStorage.setItem(CACHE_KEY, JSON.stringify({ theme, density, accent, fontSize: fs || undefined, custom })); } catch (e) { /* нет хранилища */ }

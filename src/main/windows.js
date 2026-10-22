@@ -80,10 +80,14 @@ function createWindows(ctx) {
   }
 
   function uiWebPreferences(viewName) {
+    // Модули фич для ui-preload (electron-chrome-extensions) нужны только chrome. Панель и overlay — в песочнице:
+    // без Node в рендерере они грузятся быстрее (PERF-4), preload там требует только 'electron'.
+    const isChrome = viewName === 'chrome';
+    const modules = isChrome && ctx.uiPreload ? ctx.uiPreload.modules() : [];
     return {
       session: ctx.sessions.ui(),
       preload: path.join(ctx.paths.src, 'preload', 'ui-preload.js'),
-      sandbox: false,
+      sandbox: !isChrome,
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
@@ -94,7 +98,7 @@ function createWindows(ctx) {
       additionalArguments: [
         '--kosmo-view=' + viewName,
         '--kosmo-app-version=' + ctx.app.getVersion(),
-        '--kosmo-ui-modules=' + encodeURIComponent(JSON.stringify(ctx.uiPreload ? ctx.uiPreload.modules() : [])),
+        '--kosmo-ui-modules=' + encodeURIComponent(JSON.stringify(modules)),
       ],
     };
   }
@@ -141,7 +145,8 @@ function createWindows(ctx) {
     win.once('ready-to-show', show);
     setTimeout(show, 2500);
 
-    wc.on('did-finish-load', () => {
+    // dom-ready, а не did-finish-load: load ждёт картинки (значки вкладок из сети) и приходит на 1,5–2 с позже.
+    wc.on('dom-ready', () => {
       sendLayoutState();
       if (ctx.tabs) ctx.tabs.broadcastState(true);
       if (ctx.settings.peek('ui.theme') === 'custom') syncTitleBarFromChrome();
@@ -305,9 +310,40 @@ function createWindows(ctx) {
     return chromeHeight;
   }
 
+  // Модальный overlay затемняет всё окно, кроме нативных кнопок, — на это время подмешиваем к ним
+  // затемнение (--k-backdrop темы), иначе в светлой теме остаётся яркое пятно в углу (UX-28).
+  const BACKDROP = {
+    cosmos: [4, 5, 10, 0.55], graphite: [0, 0, 0, 0.55], light: [20, 26, 46, 0.28], terminal: [0, 0, 0, 0.66], customLight: [20, 26, 46, 0.28],
+  };
+  let dimmed = false;
+  function mixHex(hex, b) {
+    const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v, i) => Math.round(v * (1 - b[3]) + b[i] * b[3]));
+    return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+  }
+  function backdrop() {
+    const ui = ctx.settings.peek('ui') || {};
+    if (ui.theme === 'custom') {
+      const m = /^#([0-9a-f]{6})$/i.exec(String((ui.custom && ui.custom.bg) || ''));
+      const n = m ? parseInt(m[1], 16) : 0;
+      const lum = (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+      return lum > 0.6 ? BACKDROP.customLight : BACKDROP.cosmos;
+    }
+    return BACKDROP[ui.theme] || BACKDROP.cosmos;
+  }
+  function setTitleBarDim(on) {
+    if (!!on === dimmed) return;
+    dimmed = !!on;
+    applyTitleBar();
+  }
+
   function applyTitleBar() {
     if (!win || win.isDestroyed()) return;
-    try { win.setTitleBarOverlay(Object.assign({}, titleBarColors, { height: titleBarHeight })); } catch (e) {
+    let c = titleBarColors;
+    if (dimmed) { const b = backdrop(); c = { color: mixHex(c.color, b), symbolColor: mixHex(c.symbolColor, b) }; }
+    try { win.setTitleBarOverlay(Object.assign({}, c, { height: titleBarHeight })); } catch (e) {
       ctx.log('windows', 'setTitleBarOverlay:', e.message);
     }
   }
@@ -414,6 +450,7 @@ function createWindows(ctx) {
     get activeView() { return activeView; },
     setChromeHeight,
     setTitleBarColors,
+    setTitleBarDim,
     get titleBarColors() { return Object.assign({}, titleBarColors, { height: titleBarHeight }); },
     setHtmlFullscreen,
     exitHtmlFullscreen,

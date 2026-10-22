@@ -75,7 +75,7 @@
     U.clear(box);
     if (key === 'loading') box.appendChild(h('span.k-spinner'));
     else if (key === 'crashed') box.innerHTML = svg('alert-triangle');
-    else if (key === 'internal') box.innerHTML = svg('orbit');
+    else if (key === 'internal') box.innerHTML = svg('kosmolet');
     else if (key === 'globe') box.innerHTML = svg('globe');
     else {
       const img = h('img', { alt: '', draggable: 'false', decoding: 'async', referrerpolicy: 'no-referrer' });
@@ -345,9 +345,15 @@
   const omni = {
     box: $('omnibox'), input: $('omni-input'), display: $('omni-display'), chip: $('omni-security'),
     field: document.querySelector('#omnibox .omni-field'),
-    focused: false, editing: false, shownUrl: null, chipKey: '',
+    focused: false, shownUrl: null, chipKey: '',
     drafts: new Map(), cbs: { input: new Set(), key: new Set(), focus: new Set(), blur: new Set() }
   };
+  // editing → класс .editing: пока адрес правят, значки страницы справа скрыты (как в Chrome) — больше места под ввод
+  let omniEditing = false;
+  Object.defineProperty(omni, 'editing', {
+    get() { return omniEditing; },
+    set(v) { v = !!v; if (v === omniEditing) return; omniEditing = v; omni.box.classList.toggle('editing', v); }
+  });
   function callAll(set, ...args) {
     let handled = false;
     for (const cb of Array.from(set)) { try { if (cb(...args) === true) handled = true; } catch (e) { console.error('[chrome] omnibox', e); } }
@@ -379,7 +385,7 @@
     // страница не загрузилась: замок «Защищено» здесь вводил бы в заблуждение
     if (info.error) return { kind: 'error', icon: 'info', title: 'Страница не загрузилась' };
     const p = parseUrl(url);
-    if (p.internal) return { kind: 'internal', icon: 'orbit', label: 'Космолёт', title: 'Внутренняя страница Космолёта' };
+    if (p.internal) return { kind: 'internal', icon: 'kosmolet', label: 'Космолёт', title: 'Внутренняя страница Космолёта' };
     if (p.scheme === 'https') return { kind: 'secure', icon: 'lock', title: 'Защищённое соединение' };
     if (p.scheme === 'http' && p.local) return { kind: 'local', icon: 'server', title: 'Локальный адрес' };
     if (p.scheme === 'http') return { kind: 'insecure', icon: 'alert-triangle', label: 'Не защищено', title: 'Соединение не защищено: данные передаются открытым текстом' };
@@ -887,6 +893,11 @@
     hexCtx.fillRect(0, 0, 1, 1);
     const d = hexCtx.getImageData(0, 0, 1, 1).data;
     return '#' + [d[0], d[1], d[2]].map((x) => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Тосты chrome — слоем overlay: собственный хост тоста оказался бы под видом вкладки и не был бы виден.
+  if (U.hasKosmo && U.setToastHandler) {
+    U.setToastHandler((text, opts) => { fire('kosmo:overlay.toast', { text, tone: opts.tone || null, ms: opts.ms || 3000 }); return null; });
   }
 
   // ---------- старт ----------

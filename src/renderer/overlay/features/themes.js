@@ -13,8 +13,8 @@
     { key: 'contrast', label: 'Контраст', min: 50, max: 150 },
     { key: 'sepia', label: 'Сепия', min: 0, max: 100 }
   ];
-  const MODES = [['off', 'Выкл'], ['list', 'Выбранные'], ['all', 'Все']];
-  const ENGINES = [['dynamic', 'Динамический'], ['filter', 'Фильтр']];
+  const MODES = [['off', 'Выключена'], ['list', 'Выбранные сайты'], ['all', 'Все сайты']];
+  const ENGINES = [['dynamic', 'Точный'], ['filter', 'Быстрый']];
 
   function seg(options, onPick, label) {
     const el = h('div.k-seg.kt-seg', { role: 'radiogroup', 'aria-label': label });
@@ -54,11 +54,11 @@
         rows[s.key] = { range, val };
       }
       const engine = seg(ENGINES, (v) => send({ engine: v }), 'Движок');
-      const engineRow = h('div.kt-row', { title: 'Динамический — Dark Reader пересчитывает цвета сайта. Фильтр — инверсия всей страницы: быстрее, но грубее.' }, h('span.kt-label', 'Движок'), engine);
+      const engineRow = h('div.kt-row', { title: 'Точный — Dark Reader пересчитывает цвета сайта, но на тяжёлых сайтах замедляет загрузку. Быстрый — инверсия всей страницы: почти бесплатно, но грубее.' }, h('span.kt-label', 'Движок'), engine);
       const params = h('div.kt-params', sliders, engineRow);
 
       const mode = seg(MODES, (v) => api.invoke('kosmo:settings.set', { path: 'siteThemes.mode', value: v }).then(load).catch(err), 'Тёмная тема для сайтов');
-      const modeRow = h('div.kt-row.kt-mode', { title: 'Выкл — тёмная тема нигде. Выбранные — только на включённых сайтах. Все — везде, кроме выключенных вручную.' }, h('span.kt-label', 'Для сайтов'), mode);
+      const modeRow = h('div.kt-row.kt-mode', { title: 'Выключена — тёмной темы нет нигде. Выбранные сайты — только там, где вы её включили. Все сайты — везде, кроме выключенных вручную.' }, h('span.kt-label', 'Режим'), mode);
 
       const cssBtn = h('button.k-btn.k-btn-sm', { type: 'button' }, U.icon('braces', 14), 'Свой CSS…');
       cssBtn.addEventListener('click', () => { api.fire('kosmo:panel.open', { tool: 'theme' }); api.close(); });

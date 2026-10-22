@@ -1,5 +1,5 @@
 // Владелец: tools-pack. Инструмент панели «Рентген»: SEO, технологии, скорость, сервер и заголовки безопасности
-// активной страницы. Анализ — в main (kosmo:xray.run); здесь отрисовка, отчёт в Markdown и «Отдать Claude».
+// активной страницы. Анализ — в main (kosmo:xray.run); здесь отрисовка, отчёт в Markdown и «Отправить в Claude».
 'use strict';
 (function () {
   const U = window.KUI;
@@ -54,14 +54,16 @@
       el.classList.add('tp-xr');
       const st = { rep: null, loading: false, error: null, seq: 0, key: '', pendingKey: '', collapsed: lsGet() };
 
-      const icon = h('span.tp-xr-ic', U.icon('scan', 18));
-      const hostEl = h('div.tp-xr-host.k-ellipsis', 'Рентген страницы');
-      const urlEl = h('div.tp-xr-url.k-ellipsis');
       const btn = (ic, title, onClick) => { const b = h('button.k-icon-btn.k-icon-btn-sm', { type: 'button', title, 'aria-label': title, html: window.KIcons.get(ic, 15) }); b.addEventListener('click', onClick); return b; };
       const refreshBtn = btn('rotate-cw', 'Обновить', () => run(true));
       const copyBtn = btn('copy', 'Копировать отчёт (Markdown)', () => { if (st.rep) U.copyText(toMarkdown(st.rep), { message: 'Отчёт скопирован (Markdown)' }); });
-      const claudeBtn = btn('claude', 'Отдать Claude', () => sendToClaude());
-      const head = h('header.tp-xr-head', icon, h('div.tp-xr-titles', hostEl, urlEl), refreshBtn, copyBtn, claudeBtn);
+      const claudeBtn = btn('claude', 'Отправить в Claude', () => sendToClaude());
+      // общая шапка «текущий сайт» панели (api.siteHeader); запасной вариант — своя, как раньше
+      const site = api.siteHeader ? api.siteHeader({ icon: 'scan', title: 'Рентген страницы', actions: [refreshBtn, copyBtn, claudeBtn] }) : null;
+      const hostEl = site ? null : h('div.tp-xr-host.k-ellipsis', 'Рентген страницы');
+      const urlEl = site ? null : h('div.tp-xr-url.k-ellipsis');
+      const head = site ? site.el : h('header.tp-xr-head', h('span.tp-xr-ic', U.icon('scan', 18)), h('div.tp-xr-titles', hostEl, urlEl), refreshBtn, copyBtn, claudeBtn);
+      if (site) head.classList.add('tp-xr-site');
       const summary = h('div.tp-xr-summary');
       const body = h('div.tp-xr-body');
       el.append(head, summary, body);
@@ -70,9 +72,12 @@
         const url = st.rep ? st.rep.url : t ? t.url : '';
         let host = '';
         try { host = new URL(url).hostname; } catch (e) { host = ''; }
-        hostEl.textContent = host || (t && t.title) || 'Рентген страницы';
-        urlEl.textContent = url ? decodeSafe(url) : '';
-        urlEl.title = url;
+        if (site) site.set({ title: host || (t && t.title) || 'Рентген страницы', sub: url ? decodeSafe(url) : '', subTitle: url });
+        else {
+          hostEl.textContent = host || (t && t.title) || 'Рентген страницы';
+          urlEl.textContent = url ? decodeSafe(url) : '';
+          urlEl.title = url;
+        }
         copyBtn.disabled = claudeBtn.disabled = !st.rep || st.loading;
         refreshBtn.disabled = st.loading || !t || !isWeb(t.url);
       }

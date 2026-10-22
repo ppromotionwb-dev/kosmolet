@@ -9,7 +9,7 @@
 // check (для wait_for), scrollBy, refFor, selection. Ошибки возвращаются как {__error}.
 
 const WORLD = 1002;
-const VERSION = 9;
+const VERSION = 11;
 
 /* eslint-disable no-var */
 function lib(VERSION) {
@@ -535,6 +535,7 @@ function lib(VERSION) {
     const head = [];
     head.push('Title: ' + (document.title || '(no title)'));
     head.push('URL: ' + location.href);
+    if (themed()) head.push(THEME_NOTE);
     head.push('Viewport ' + innerWidth + '×' + innerHeight + ', scroll ' + Math.round(scrollX) + ',' + Math.round(scrollY) +
       ' of ' + se.scrollWidth + '×' + se.scrollHeight + (visibleOnly ? ' (visible part only)' : '') +
       (a.selector ? ' — subtree ' + a.selector : '') + ', mode ' + mode);
@@ -614,8 +615,13 @@ function lib(VERSION) {
       if (h && (h === el || containsDeep(el, h))) { x = px; y = py; hit = true; break; }
       if (!cover && h) cover = describe(h);
     }
+    let link = null;
+    try { link = el.closest && el.closest('a[href]'); } catch (e) { link = null; }
     return {
       x, y, rect: r, visible: vis, hit, cover: hit ? '' : cover, desc: describe(el), tag: el.tagName.toLowerCase(),
+      href: link ? String(link.href || '') : '', hrefTarget: link ? String(link.target || '') : '',
+      // visual viewport: масштаб страницы (pinch, мобильная вёрстка без meta viewport) — для перевода в координаты окна
+      vvs: window.visualViewport ? visualViewport.scale : 1, vvx: window.visualViewport ? visualViewport.offsetLeft : 0, vvy: window.visualViewport ? visualViewport.offsetTop : 0,
       password: el.tagName === 'INPUT' && el.type === 'password',
       disabled: !!(el.disabled || el.getAttribute('aria-disabled') === 'true'),
       vw: innerWidth, vh: innerHeight,
@@ -678,6 +684,11 @@ function lib(VERSION) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
     return { selected: picked.map((o) => norm(o.text) + (o.value !== norm(o.text) ? ' (' + o.value + ')' : '')), desc: describe(el) };
   }
+  // Тёмная тема Космолёта (движок Dark Reader) перекрашивает сайт: цвета, фоны и часть DOM — не сайта.
+  const THEME_NOTE = "Note: the browser's dark site theme (Dark Reader) is ON for this page — colors, backgrounds and computed styles are recolored by the browser, not the site's own CSS. Ask the user to turn it off (moon icon in the address bar) before judging the site's colors.";
+  function themed() {
+    try { return !!document.querySelector('style.darkreader, meta[name="darkreader"]') || document.documentElement.hasAttribute('data-darkreader-mode'); } catch (e) { return false; }
+  }
   function info() {
     const se = document.scrollingElement || document.documentElement;
     let sel = '';
@@ -690,6 +701,7 @@ function lib(VERSION) {
       focused: act && act !== document.body && act !== document.documentElement ? describe(act) : '',
       selection: clip(sel, 20000), lang: document.documentElement.lang || '',
       elements: document.getElementsByTagName('*').length,
+      themed: themed(),
     };
   }
   function html(a) {
@@ -699,6 +711,18 @@ function lib(VERSION) {
     const rm = a.keepScripts ? 'template' : 'script,style,noscript,template,link[rel=stylesheet],link[rel=preload],link[rel=prefetch],link[rel=modulepreload]';
     if (clone.querySelectorAll) {
       for (const n of clone.querySelectorAll(rm)) n.remove();
+      // следы тёмной темы браузера (Dark Reader) — не вёрстка сайта
+      for (const n of clone.querySelectorAll('style.darkreader, meta[name="darkreader"]')) n.remove();
+      for (const n of [clone].concat(Array.from(clone.querySelectorAll('*')))) {
+        if (!n.attributes) continue;
+        for (const at of Array.from(n.attributes)) {
+          if (/^data-darkreader-/i.test(at.name)) n.removeAttribute(at.name);
+          else if (at.name === 'style' && /--darkreader-/i.test(at.value)) {
+            const v = at.value.replace(/\s*--darkreader-[\w-]+\s*:[^;]*;?/gi, '').trim();
+            if (v) n.setAttribute('style', v); else n.removeAttribute('style');
+          }
+        }
+      }
       if (!a.keepSvg) for (const s of clone.querySelectorAll('svg')) { while (s.firstChild) s.removeChild(s.firstChild); }
       for (const n of clone.querySelectorAll('*')) {
         for (const at of Array.from(n.attributes)) {
@@ -709,7 +733,7 @@ function lib(VERSION) {
     let s = clone.outerHTML || '';
     s = s.replace(/\n\s*\n+/g, '\n');
     const total = s.length;
-    return { html: s.length > max ? s.slice(0, max) : s, total, truncated: total > max, desc: el === document.documentElement ? 'document' : describe(el) };
+    return { html: s.length > max ? s.slice(0, max) : s, total, truncated: total > max, desc: el === document.documentElement ? 'document' : describe(el), themed: themed() };
   }
   function storage(a) {
     const st = a.type === 'session' ? sessionStorage : localStorage;
@@ -770,6 +794,7 @@ function lib(VERSION) {
     selection: () => { try { return String(getSelection()); } catch (e) { return ''; } } };
   globalThis.__kosmoSnap = {
     v: VERSION,
+    themeNote: THEME_NOTE,
     run(method, args) {
       const fn = API[method];
       if (!fn) return { __error: 'unknown method ' + method };

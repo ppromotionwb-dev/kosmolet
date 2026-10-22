@@ -11,7 +11,7 @@
   box-shadow: inset 0 0 0 1px var(--k-border-strong);
   transition: transform var(--k-dur-fast) var(--k-ease), box-shadow var(--k-dur-fast) var(--k-ease);
 }
-.kc-color:hover { transform: scale(1.06); }
+.kc-color:hover { transform: scale(1.06); box-shadow: inset 0 0 0 1px var(--k-border-strong), 0 0 0 2px var(--k-bg-elev), 0 0 0 4px color-mix(in srgb, var(--kc) 45%, transparent); }
 .kc-color[aria-expanded="true"] { box-shadow: 0 0 0 2px var(--k-bg-elev), 0 0 0 4px var(--kc); }
 
 .kc-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -25,8 +25,9 @@
 .kc-sub { display: flex; align-items: center; gap: 8px; }
 .kc-meta { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
 
-.kc-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.kc-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; flex-shrink: 0; }
 .kc-del:hover { color: var(--k-danger); }
+.kc-del-gap { visibility: hidden; pointer-events: none; }
 .kc-confirm { color: var(--k-text-dim); font-size: var(--k-fs-sm); margin-right: 8px; max-width: 300px; text-align: right; }
 
 .kc-palette { padding: 2px 0 12px 38px; gap: 8px; }

@@ -12,17 +12,6 @@
 .kpo-title { font-weight: 600; color: var(--k-text); }
 .kpo-sub { color: var(--k-text-faint); font-size: var(--k-fs-sm); margin-top: 1px; }
 
-.kpo-row {
-  display: flex; align-items: center; gap: 12px;
-  margin: 0 8px; padding: 10px 8px;
-  border-top: 1px solid var(--k-border);
-  cursor: pointer;
-}
-.kpo-row[hidden] { display: none; }
-.kpo-row-text { flex: 1; min-width: 0; }
-.kpo-row-label { color: var(--k-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kpo-row-hint { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin-top: 2px; }
-
 .kpo-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 14px 12px; transition: opacity var(--k-dur) var(--k-ease); }
 .kpo-stats.dim { opacity: 0.45; }
 .kpo-stat { padding: 8px 10px; border-radius: var(--k-radius); background: var(--k-bg-sunken); border: 1px solid var(--k-border); }
@@ -31,7 +20,7 @@
 
 .kpo-note { margin: 0 14px 10px; color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.4; }
 .kpo-note[hidden] { display: none; }
-.kpo-foot { display: flex; justify-content: flex-start; padding: 6px 8px; border-top: 1px solid var(--k-border); background: var(--k-bg-elev); }
+.kpo-foot { display: flex; align-items: center; justify-content: flex-start; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--k-border); background: var(--k-bg-elev); }
 
 /* ---------- модальные окна ---------- */
 .kpo-modal { padding: 18px 20px 16px; }
@@ -53,8 +42,10 @@
 .kpo-mfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 .kpo-label { color: var(--k-text-dim); font-size: var(--k-fs-sm); margin: 12px 0 6px; }
-.kpo-perms { margin: 0; padding: 0 0 0 18px; color: var(--k-text); display: flex; flex-direction: column; gap: 3px; }
+.kpo-perms { margin: 0; padding: 0 0 0 18px; color: var(--k-text); list-style: disc outside; }
 .kpo-perms li { line-height: 1.4; }
+.kpo-perms li + li { margin-top: 3px; }
+.kpo-perms li::marker { color: var(--k-text-faint); }
 .kpo-perms li.strong { color: var(--k-warn); }
 .kpo-modal .kpo-note { margin: 12px 0 4px; color: var(--k-text-faint); }
 .kpo-modal .kpo-mfoot { margin-top: 14px; }

@@ -23,9 +23,36 @@ function createCtx({ app, electron, flags, paths }) {
     const ts = t.toTimeString().slice(0, 8) + '.' + String(t.getMilliseconds()).padStart(3, '0');
     logs.push({ ts: t.getTime(), scope, line });
     if (logs.length > LOG_LIMIT) logs.splice(0, logs.length - LOG_LIMIT);
-    // eslint-disable-next-line no-console
-    console.log(`${ts} [${scope}] ${line}`);
+    out(`${ts} [${scope}] ${line}\n`);
   }
+
+  // Вывод лога. В dev stdout перенаправлен в файл (start-dev.ps1), и синхронная запись каждой строки
+  // стоила десятки мс потока main (PERF-17): копим строки и пишем одним асинхронным вызовом,
+  // по одному за раз (порядок сохраняется); остаток — синхронно при выходе.
+  const fs = require('fs');
+  let pending = '';
+  let inFlight = false;
+  let flushTimer = null;
+  function pump() {
+    flushTimer = null;
+    if (inFlight || !pending) return;
+    const chunk = pending;
+    pending = '';
+    inFlight = true;
+    fs.write(1, chunk, (err) => {
+      inFlight = false;
+      if (err) { /* stdout закрыт — молча */ }
+      if (pending && !flushTimer) flushTimer = setTimeout(pump, 0);
+    });
+  }
+  function out(s) {
+    // eslint-disable-next-line no-console
+    if (!flags || !flags.dev) { console.log(s.slice(0, -1)); return; }
+    pending += s;
+    if (pending.length > 1 << 20) pending = pending.slice(-(1 << 20)); // не копить бесконечно, если stdout встал
+    if (!flushTimer && !inFlight) { flushTimer = setTimeout(pump, 30); if (flushTimer.unref) flushTimer.unref(); }
+  }
+  process.on('exit', () => { if (pending) { try { fs.writeSync(1, pending); } catch (_) { /* нет stdout */ } pending = ''; } });
 
   const ctx = {
     app,

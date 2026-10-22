@@ -61,6 +61,10 @@ function which(bin, exts) {
   return null;
 }
 
+// Метка «claude завершился»: после команды claude оболочка (она остаётся жить: -NoExit, cmd /k, exec bash)
+// меняет заголовок консоли на EXIT_TITLE — ConPTY присылает его в выводе как OSC 0. По ней pasteToClaude
+// понимает, что в сессии теперь обычная оболочка, и не вставляет туда путь.
+const EXIT_TITLE = 'Kosmolet: claude exited';
 const psQuote = (s) => "'" + String(s).replace(/'/g, "''") + "'";
 const shQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
 const cmdQuote = (s) => '"' + s + '"';
@@ -228,13 +232,14 @@ function init(ctx) {
       const sh = process.env.SHELL || '/bin/bash';
       if (!c) return { file: sh, args: ['-l', '-i'], shell: 'sh' };
       const line = [c.resolved || c.bin].concat(c.args).map(shQuote).join(' ');
-      return { file: sh, args: ['-l', '-i', '-c', `${line}; exec ${shQuote(sh)} -l -i`], shell: 'sh', claude: c };
+      return { file: sh, args: ['-l', '-i', '-c', `${line}; printf '\\033]0;%s\\007' ${shQuote(EXIT_TITLE)}; exec ${shQuote(sh)} -l -i`], shell: 'sh', claude: c };
     }
     if (shell === 'powershell') {
       const file = powershellPath();
       if (!c) return { file, args: ['-NoLogo'], shell };
       const bin = checkArg(c.resolved || c.bin, 'команда claude');
-      const line = '& ' + [bin].concat(c.args.map((a) => checkArg(a, 'аргумент claude'))).map(psQuote).join(' ');
+      const line = '& ' + [bin].concat(c.args.map((a) => checkArg(a, 'аргумент claude'))).map(psQuote).join(' ')
+        + `; $Host.UI.RawUI.WindowTitle = ${psQuote(EXIT_TITLE)}`;
       return { file, args: ['-NoLogo', '-NoExit', '-Command', line], shell, claude: c };
     }
     if (shell === 'cmd') {
@@ -242,8 +247,8 @@ function init(ctx) {
       if (!c) return { file, args: [], shell };
       const bad = (a) => { checkArg(a, 'команда claude'); if (/%/.test(a)) throw new Error('символ % в команде claude не поддерживается в cmd'); return a; };
       const line = [bad(c.resolved || c.bin)].concat(c.args.map(bad)).map(cmdQuote).join(' ');
-      // /s /k ""bin" "a" "b"" — cmd снимает внешние кавычки и выполняет строку, потом остаётся открытым
-      return { file, args: `/s /k "${line}"`, shell, claude: c };
+      // /s /k ""bin" "a" "b" & title …" — cmd снимает внешние кавычки и выполняет строку, потом остаётся открытым
+      return { file, args: `/s /k "${line} & title ${EXIT_TITLE}"`, shell, claude: c };
     }
     // Git Bash
     const file = gitBashPath();
@@ -251,7 +256,7 @@ function init(ctx) {
     if (!c) return { file, args: ['--login', '-i'], shell };
     const bin = c.resolved ? toPosix(c.resolved) : c.bin;
     const line = [bin].concat(c.args.map((a) => (isFile(a) ? toPosix(a) : a))).map(shQuote).join(' ');
-    return { file, args: ['--login', '-i', '-c', `${line}; exec bash --login -i`], shell, claude: c };
+    return { file, args: ['--login', '-i', '-c', `${line}; printf '\\033]0;%s\\007' ${shQuote(EXIT_TITLE)}; exec bash --login -i`], shell, claude: c };
   }
 
   // ---------- сессии ----------
@@ -330,6 +335,17 @@ function init(ctx) {
       while ((m = re.exec(data))) last = m[1];
       if (last) s.bracketed = last === 'h';
     }
+    // claude завершился (метка EXIT_TITLE, см. buildSpawn): дальше в сессии обычная оболочка
+    if (s.profile === 'claude' && !s.claudeExited) {
+      const tail = (s.markTail || '') + data;
+      if (tail.indexOf(EXIT_TITLE) >= 0) {
+        s.claudeExited = true;
+        s.bracketed = false;
+        ctx.log('terminal', `сессия ${s.id}: claude завершился, в сессии осталась оболочка`);
+        emitSessions();
+      }
+      s.markTail = tail.slice(-EXIT_TITLE.length);
+    }
     if (s.pending.length > 512 * 1024) flushOne(s); else scheduleFlush();
   }
 
@@ -389,6 +405,8 @@ function init(ctx) {
     s.alive = true;
     s.exitCode = null;
     s.bracketed = false;
+    s.claudeExited = false;
+    s.markTail = '';
     s.shell = spec.shell;
     s.spec = { file: spec.file, args: spec.args, claude: spec.claude ? { bin: spec.claude.bin, resolved: spec.claude.resolved, args: spec.claude.args } : null };
     s.disposers.push(p.onData((d) => onData(s, p, d)));
@@ -552,10 +570,20 @@ function init(ctx) {
     }
   }
 
+  // Сам claude ещё работает в сессии, а не осталась оболочка после его выхода (/exit, падение, --version):
+  // Claude Code включает bracketed paste (DECSET 2004), Windows PowerShell и cmd — нет. Bash (readline) включает
+  // его на каждом приглашении, поэтому bash-сессия после метки выхода claude (EXIT_TITLE) больше не Claude.
+  function claudeRunning(s) {
+    if (!s || s.profile !== 'claude' || !s.alive || !s.pty) return false;
+    if (!s.bracketed) return false;
+    if (s.claudeExited && (s.shell === 'bash' || s.shell === 'sh')) return false;
+    return true;
+  }
+
   function lastClaude() {
     let best = null;
     for (const s of sessions.values()) {
-      if (s.profile !== 'claude' || !s.alive || !s.pty) continue;
+      if (!claudeRunning(s)) continue;
       if (!best || s.lastUsed > best.lastUsed) best = s;
     }
     return best;
@@ -668,6 +696,21 @@ function init(ctx) {
     termFocused = false;
     wc.on('did-start-loading', () => { termFocused = false; });
   });
+  // Прогрев: node-pty (нативный модуль) и проверка conpty.dll — пока пользователь смотрит на пустой терминал,
+  // а не в момент нажатия «Запустить» (первая сессия иначе блокирует main на ~0,8 с).
+  let warmed = false;
+  const warm = () => {
+    if (warmed || sessions.size || ctx.panel.tool() !== 'claude') return;
+    warmed = true;
+    setTimeout(() => {
+      if (sessions.size) return;
+      const t0 = Date.now();
+      try { pty(); if (IS_WIN) conptyDllAvailable(); } catch (e) { ctx.log('terminal', 'прогрев node-pty:', e.message); return; }
+      ctx.log('terminal', `node-pty загружен заранее за ${Date.now() - t0} мс`);
+    }, 300);
+  };
+  ctx.panel.on('opened', warm);
+  ctx.panel.on('tool-changed', warm);
 
   // ---------- команды ----------
   ctx.commands.register({

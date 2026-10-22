@@ -100,8 +100,11 @@
 
   // ---------- тосты ----------
   let toastHost = null;
+  let toastHandler = null; // chrome: тосты показывает слой overlay (свой хост лежал бы под видом вкладки)
+  function setToastHandler(fn) { toastHandler = typeof fn === 'function' ? fn : null; }
   function toast(text, opts) {
     opts = opts || {};
+    if (toastHandler) { try { return toastHandler(String(text == null ? '' : text), opts) || null; } catch (e) { console.warn('[kui] toast', e); } }
     if (!toastHost) {
       toastHost = h('div.k-toast-host', { role: 'status', 'aria-live': 'polite' });
       document.body.appendChild(toastHost);
@@ -115,6 +118,17 @@
       setTimeout(() => t.remove(), 220);
     }, ms);
     return t;
+  }
+
+  // ---------- сочетания клавиш ----------
+  // Один вид для всего интерфейса: клавиши по отдельности, между ними тонкий «+». kbd('Ctrl+Shift+T') → <span.k-combo>
+  const KEY_NAMES = { Left: '←', Right: '→', Up: '↑', Down: '↓', PageUp: 'PgUp', PageDown: 'PgDn', Escape: 'Esc', NumpadAdd: 'Num +', NumpadSubtract: 'Num −', Numpad0: 'Num 0', '-': '−' };
+  function kbd(combo) {
+    combo = String(combo == null ? '' : combo);
+    if (!combo || /\s|…|клик|кнопка/.test(combo)) return h('span.k-combo', h('span.k-kbd', combo));
+    const parts = combo.split('+');
+    if (combo.endsWith('++')) parts.splice(parts.length - 2, 2, '+');
+    return h('span.k-combo', parts.map((p, i) => [i ? h('span.k-combo-plus', '+') : null, h('span.k-kbd', KEY_NAMES[p] || p)]));
   }
 
   // ---------- буфер обмена ----------
@@ -331,7 +345,7 @@
   window.KUI = {
     kosmo, hasKosmo, invoke, send, fire, on,
     h, append, icon, empty, clear, esc, css,
-    toast, copyText,
+    toast, setToastHandler, copyText, kbd,
     debounce, throttle, rafThrottle,
     plural, formatBytes, formatMs, formatTime, formatDate, timeAgo,
     hostToUnicode, parseUrl, readableUrl,

@@ -56,6 +56,13 @@ else app.setPath('userData', path.join(app.getPath('appData'), 'Kosmolet'));
 const USER_DATA = app.getPath('userData');
 try { fs.mkdirSync(USER_DATA, { recursive: true }); } catch (_) {}
 
+// Кэш компиляции модулей Node (PERF-12): require ядра и фич на старте ~20% быстрее. Ключ — содержимое файла,
+// поэтому правки кода кэш не ломают. Модули ядра и фич подключаются ниже, в whenReady — уже с кэшем.
+try {
+  const mod = require('module');
+  if (typeof mod.enableCompileCache === 'function') mod.enableCompileCache(path.join(USER_DATA, 'gen', 'compile-cache'));
+} catch (_) { /* старый Node — без кэша */ }
+
 // corsEnabled:false — сайты не могут читать kosmo:// через fetch/XHR (обработчик протокола не видит Origin,
 // отличить запрос сайта иначе нельзя). Внутри kosmo:// same-origin fetch и ES-модули работают.
 protocol.registerSchemesAsPrivileged([{
@@ -234,24 +241,36 @@ function boot() {
 }
 
 // Рассылка во все UI webContents и во вкладки с внутренними страницами.
+// opts.forInternal(host) → своё содержимое для внутренней страницы (null — не слать): так страницы без прав
+// не получают чувствительные данные (например, настройки с токеном).
 function makeBroadcast(ctx) {
-  return function broadcast(channel, payload) {
+  return function broadcast(channel, payload, opts) {
     const targets = [];
     const win = ctx.windows && ctx.windows.main;
-    if (win && !win.isDestroyed()) targets.push(win.webContents);
+    if (win && !win.isDestroyed()) targets.push([win.webContents, payload]);
     const pw = ctx.panel && ctx.panel.webContents();
-    if (pw) targets.push(pw);
+    if (pw) targets.push([pw, payload]);
     const ow = ctx.overlay && ctx.overlay.webContents();
-    if (ow) targets.push(ow);
+    if (ow) targets.push([ow, payload]);
     if (ctx.tabs) {
+      const custom = opts && typeof opts.forInternal === 'function' ? opts.forInternal : null;
       for (const t of ctx.tabs.all()) {
         const wc = t.wc;
         if (!wc || wc.isDestroyed()) continue;
-        if (ctx.ipc.isInternalUrl(wc.getURL())) targets.push(wc);
+        const url = wc.getURL();
+        if (!ctx.ipc.isInternalUrl(url)) continue;
+        let p = payload;
+        if (custom) {
+          let host = '';
+          try { host = new URL(url).hostname; } catch (_) { host = ''; }
+          p = custom(host);
+          if (p == null) continue;
+        }
+        targets.push([wc, p]);
       }
     }
-    for (const wc of targets) {
-      try { if (!wc.isDestroyed()) wc.send(channel, payload); } catch (e) { ctx.log('broadcast', channel, e.message); }
+    for (const [wc, p] of targets) {
+      try { if (!wc.isDestroyed()) wc.send(channel, p); } catch (e) { ctx.log('broadcast', channel, e.message); }
     }
   };
 }

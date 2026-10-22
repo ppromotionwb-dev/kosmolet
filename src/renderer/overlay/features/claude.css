@@ -41,7 +41,7 @@
 .kcl-time { color: var(--k-text-faint); font-variant-numeric: tabular-nums; }
 .kcl-tool { color: var(--k-text); font-size: var(--k-fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kcl-arg { color: var(--k-text-faint); }
-.kcl-ms { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; }
+.kcl-ms { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kcl-item > .k-ic { color: var(--k-ok); }
 .kcl-item.bad > .k-ic, .kcl-item.bad .kcl-tool { color: var(--k-danger); }
 .kcl-empty { display: flex; align-items: center; gap: 8px; padding: 6px 6px 4px; color: var(--k-text-faint); font-size: var(--k-fs-sm); }

@@ -25,7 +25,9 @@ function createHistory(ctx) {
   function ensure() {
     if (data) return;
     const t0 = Date.now();
-    store = ctx.store('history', { version: 1, entries: [], hidden: [] }, { pretty: false, debounceMs: 4000 });
+    // Запись всего файла (10 000 записей ≈ 1,6 МБ) стоит ~40 мс потока main — пишем не чаще раза в 15 с
+    // (PERF-13); при выходе store.flushAll() дописывает остаток.
+    store = ctx.store('history', { version: 1, entries: [], hidden: [] }, { pretty: false, debounceMs: 15000 });
     data = store.get();
     if (!data || typeof data !== 'object') data = { version: 1, entries: [], hidden: [] };
     if (!Array.isArray(data.entries)) data.entries = [];

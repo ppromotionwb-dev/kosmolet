@@ -76,6 +76,9 @@ const SERIALIZER = `function (v) {
   return s === undefined ? 'undefined' : s;
 }`;
 
+// Тёмная тема Космолёта (движок Dark Reader) перекрашивает сайт — Claude не должен судить по этим цветам о CSS сайта.
+const THEME_NOTE = "Note: the browser's dark site theme (Dark Reader) is ON for this page — colors, backgrounds and computed styles are recolored by the browser, not the site's own CSS. Ask the user to turn it off (moon icon in the address bar) before judging the site's colors.";
+
 function createTools(ctx, deps) {
   const { actions: A, activity, picker, getAccess } = deps;
   let defs = null;
@@ -107,11 +110,17 @@ function createTools(ctx, deps) {
       res = { content: [{ type: 'text', text: String((e && e.message) || e) }], isError: true };
     }
     if (call.tabId != null) { try { ctx.tabs.markClaude(call.tabId); } catch (_) { /* закрыта */ } }
-    activity.add({ tool: d.name, args: call.logArgs, tabId: call.tabId, ok: !err, ms: Date.now() - t0, error: err ? String(err.message || err) : undefined });
+    let tabTitle;
+    if (call.tabId != null) { try { const t = ctx.tabs.get(call.tabId); tabTitle = t ? clip(t.info.title || t.info.url || '', 80) : undefined; } catch (_) { tabTitle = undefined; } }
+    activity.add({ tool: d.name, args: call.logArgs, tabId: call.tabId, tabTitle, ok: !err, ms: Date.now() - t0, error: err ? String(err.message || err) : undefined });
     return res;
   }
 
   // ---------- общие куски ----------
+  // Тёмная тема сайта (Dark Reader) включена — цвета на снимке и в стилях не сайта.
+  async function themedNote(tab) {
+    try { const p = await A.lib(tab, 'info', {}, 3000); return p && p.themed ? '\n' + THEME_NOTE : ''; } catch (_) { return ''; }
+  }
   async function webTab(args, call, opts) {
     const tab = call.tab(await A.liveTab(args.tabId, Object.assign({ web: true }, opts)));
     A.assertWebPage(tab);
@@ -143,6 +152,12 @@ function createTools(ctx, deps) {
       throw new Error('this URL scheme is not allowed for Claude: ' + s.split(':')[0]);
     }
     return s;
+  }
+  // Точка элемента (CSS px layout viewport, как clientX) → координаты окна страницы: при масштабе страницы
+  // (pinch, мобильная вёрстка без meta viewport) clientX = окно / scale + offset. Точка x,y от Claude — как есть.
+  function winPt(loc) {
+    const s = loc.vvs > 0 ? loc.vvs : 1;
+    return [(loc.x - (loc.vvx || 0)) * s, (loc.y - (loc.vvy || 0)) * s];
   }
   async function target(tab, args, needVisible = true) {
     if (args.ref || args.selector) {
@@ -226,6 +241,7 @@ function createTools(ctx, deps) {
               lines.push(`Document: ${p.dw}×${p.dh}, scroll ${p.sx},${p.sy}`);
               lines.push(`Elements: ${p.elements}${p.lang ? ', lang ' + p.lang : ''}`);
               if (p.focused) lines.push(`Focused: ${p.focused}`);
+              if (p.themed) lines.push(THEME_NOTE);
               if (p.selection) lines.push(`Selected text: ${clip(p.selection.replace(/\s+/g, ' '), 300)}`);
             } catch (e) { lines.push(`(page details unavailable: ${e.message})`); }
           }
@@ -262,7 +278,7 @@ function createTools(ctx, deps) {
         async run(args, call) {
           const tab = await webTab(args, call);
           const r = await A.lib(tab, 'html', { ref: args.ref, selector: args.selector, keepScripts: args.keepScripts, keepSvg: args.keepSvg, maxChars: args.maxChars || 30000 }, 20000);
-          return `HTML of ${r.desc} (${r.total} chars${r.truncated ? ', truncated' : ''}):\n${r.html}${r.truncated ? `\n…[truncated at ${args.maxChars || 30000} of ${r.total} chars]` : ''}`;
+          return `${r.themed ? THEME_NOTE + ' Its <style class="darkreader"> tags and data-darkreader-* attributes are removed below.\n' : ''}HTML of ${r.desc} (${r.total} chars${r.truncated ? ', truncated' : ''}):\n${r.html}${r.truncated ? `\n…[truncated at ${args.maxChars || 30000} of ${r.total} chars]` : ''}`;
         },
       },
       {
@@ -309,7 +325,7 @@ function createTools(ctx, deps) {
           return {
             content: [
               { type: 'image', data: shot.data, mimeType: 'image/jpeg' },
-              { type: 'text', text: `Screenshot of ${what}, tab [${tab.id}] ${tab.wc.getURL()} — ${shot.width}×${shot.height}, ${fmtBytes(shot.bytes)}${shot.note}` },
+              { type: 'text', text: `Screenshot of ${what}, tab [${tab.id}] ${tab.wc.getURL()} — ${shot.width}×${shot.height}, ${fmtBytes(shot.bytes)}${shot.note}${await themedNote(tab)}` },
             ],
           };
         },
@@ -421,6 +437,7 @@ function createTools(ctx, deps) {
             `Text: ${p.text ? JSON.stringify(p.text) : '(empty)'}`,
             attrs ? `Attributes:\n${attrs}` : 'Attributes: (none)',
             styles ? `Styles: ${styles}` : null,
+            p.themed ? THEME_NOTE : null,
             `outerHTML (${p.htmlLength} chars${p.htmlLength > p.outerHTML.length ? ', truncated' : ''}):\n${p.outerHTML}`,
           ].filter(Boolean).join('\n');
         },
@@ -518,9 +535,21 @@ function createTools(ctx, deps) {
           const warn = [];
           if (loc.disabled) warn.push('Note: the element looks disabled.');
           if (!loc.hit && loc.cover) warn.push(`Warning: another element covers it: ${loc.cover} — the click may land there.`);
+          const waitMs = Math.max(0, Math.min(60000, args.waitMs != null ? args.waitMs : 10000));
+          // Ссылка на другой адрес того же сайта: SPA (WB и т.п.) меняет адрес через history позже — ждём дольше.
+          let spaLink = false;
+          try {
+            const cur = new URL(tab.wc.getURL());
+            const to = loc.href ? new URL(loc.href) : null;
+            spaLink = !!to && /^https?:$/.test(to.protocol) && to.origin === cur.origin && !/^_blank$/i.test(loc.hrefTarget || '')
+              && (to.pathname + to.search) !== (cur.pathname + cur.search) && (!args.button || args.button === 'left') && !(args.modifiers || []).length;
+          } catch (_) { spaLink = false; }
           const nav = A.watchNav(tab);
-          A.mouse(tab, loc.x, loc.y, { button: args.button, clickCount: args.clickCount, modifiers: mods(args.modifiers) });
-          const r = await nav.settle({ quiet: 300, extra: 700, timeout: Math.max(0, Math.min(60000, args.waitMs != null ? args.waitMs : 10000)) });
+          A.mouse(tab, ...winPt(loc), { button: args.button, clickCount: args.clickCount, modifiers: mods(args.modifiers) });
+          const r = await nav.settle({ quiet: 300, extra: spaLink ? Math.min(waitMs, 3500) : 700, timeout: waitMs });
+          if (spaLink && !r.navigated && !r.newTabs.length && r.lines.length === 1 && /^No navigation/.test(r.lines[0])) {
+            r.lines = [`URL has not changed yet (link → ${readableUrl(loc.href)}). A single-page site may still update it — check page_info or wait_for {"urlChange": true}.`];
+          }
           return [`Clicked ${loc.desc} at (${Math.round(loc.x)}, ${Math.round(loc.y)}).`, ...warn, ...r.lines].join('\n');
         },
       },
@@ -545,7 +574,7 @@ function createTools(ctx, deps) {
             if (password) call.logArgs.text = '•••';
             let f = await A.lib(tab, 'focus', { ref: args.ref, selector: args.selector, clear: args.clear });
             if (!f.focused && loc.visible) {
-              A.mouse(tab, loc.x, loc.y, {});
+              A.mouse(tab, ...winPt(loc), {});
               await A.sleep(150);
               f = await A.lib(tab, 'focus', { ref: args.ref, selector: args.selector, clear: args.clear });
             }
@@ -643,7 +672,7 @@ function createTools(ctx, deps) {
         async run(args, call) {
           const tab = await webTab(args, call);
           const loc = await target(tab, args);
-          A.mouse(tab, loc.x, loc.y, { move: true });
+          A.mouse(tab, ...winPt(loc), { move: true });
           await A.sleep(300);
           return `Hovering ${loc.desc} at (${Math.round(loc.x)}, ${Math.round(loc.y)}).${!loc.hit && loc.cover ? `\nWarning: covered by ${loc.cover}.` : ''}`;
         },

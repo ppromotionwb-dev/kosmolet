@@ -26,6 +26,9 @@ KOSMOLET/
     dev.mjs                    — core: CLI к dev-серверу (eval/shot/quit/health)
     start-dev.ps1              — core: запуск dev-экземпляра с профилем и портами
     mcp-call.mjs               — claude-bridge: CLI-клиент MCP для проверок
+    smoke.mjs                  — core: регрессия ядра (27 проверок через CDP и dev-сервер)
+    make-icon.js, make-shortcut.ps1 — tools-pack: сборка icon.ico/png и ярлыка
+    (подпапки фич: features/ux/, bridge/, devtools/, platform/, tools-pack/ — см. Приложение)
   src/
     main/
       main.js                  — core: bootstrap, флаги, порядок init модулей
@@ -98,9 +101,11 @@ KOSMOLET/
   - `--cdp-port=<n>` (по умолчанию 9333 в dev) — `remote-debugging-port`.
   - `--mcp-port=<n>` — переопределяет `settings.claude.mcpPort` (не сохраняется).
   - `--no-restore` — не восстанавливать сессию вкладок.
-  - `--open=<url>` — открыть URL вкладкой (можно несколько).
+  - `--open=<url>` — открыть URL вкладкой (можно несколько; адрес без флага тоже открывается — так его передаёт Windows).
+  - Только с `--dev`: `--offscreen` (окно за правым краем экрана, положение не сохраняется; `start-dev.ps1` ставит его по умолчанию, `-OnScreen` — показать на экране), `--ui-root=<папка>` (подмена файлов `kosmo://ui` для тестов). `--selftest` разбирается, но ничего не делает.
 - **Dev-сервер** (`dev-server.js`, только с `--dev`, только 127.0.0.1):
-  - `GET /health` → `{ok, pid, ready}`
+  - `GET /health` → `{ok, pid, ready, profile, userData, devPort, cdpPort, mcpPort, featureErrors}`
+  - `GET /logs?n=200` → последние строки лога main и консолей интерфейса (`ui:chrome`, `ui:panel`, `ui:overlay`)
   - `POST /eval {code}` → выполняет `async (ctx, electron, require) => { <code> }` в main, возвращает JSON результата (ошибка → `{error, stack}`).
   - `POST /shot {file?}` → PNG всего окна как видит пользователь (desktopCapturer по `win.getMediaSourceId()`; запасной путь — композит capturePage видов). Возвращает путь (по умолчанию `tools/dev-out/shot-<время>.png`).
   - `POST /quit`.
@@ -151,7 +156,8 @@ module.exports = { id: 'themes', init(ctx) { ... }, async start(ctx) { /* пос
 Все каналы начинаются с `kosmo:`. Формат имени: `kosmo:<область>.<действие>` (`kosmo:tabs.create`).
 
 **Main:** `ctx.ipc.handle(channel, async (payload, meta) => result, { allow: ['ui'] })`
-- `allow`: `'ui'` — наш интерфейс (chrome/panel/overlay webContents); `'internal'` — внутренние страницы `kosmo://<host>/` во вкладках (только хосты newtab, settings, history, downloads, extensions); `'tab'` — любые страницы во вкладках через tab-preload (НЕДОВЕРЕННЫЕ данные! канал должен начинаться с `kosmo-tab:`).
+- `allow`: `'ui'` — наш интерфейс (chrome/panel/overlay webContents); `'internal'` — внутренние страницы `kosmo://<host>/` во вкладках (только хосты newtab, settings, history, downloads, extensions; только главный фрейм); `'internal:<host>'` — одна внутренняя страница (например `'internal:settings'`); `'tab'` — любые страницы во вкладках через tab-preload (НЕДОВЕРЕННЫЕ данные! канал должен начинаться с `kosmo-tab:`).
+- **Права внутренних страниц (SEC-1/SEC-2).** Всё читают и пишут только `ui` и `kosmo://settings`. Остальные внутренние страницы читают из настроек только ветки `ui/search/downloads/containers` (без токена), пишут только `downloads.ask` и `downloads.dir=''` (страница downloads); `settings.patch/remove` и все каналы моста Claude (`kosmo:bridge.*`) — только `ui` и settings. Рассылка `kosmo:settings.changed` таким страницам урезана (без токена и чужих веток).
 - `meta = { kind: 'ui'|'internal'|'tab', webContents, tab /* если из вкладки */, frameUrl }`.
 - Роутер проверяет отправителя по `event.sender` и `event.senderFrame.url`; чужой — отказ с ошибкой.
 - `ctx.ipc.on(channel, fn, opts)` — для send без ответа. `ctx.ipc.handleSync(channel, fn, opts)` — для sendSync (только `kosmo-tab:*`, быстрые ответы).
@@ -188,8 +194,8 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - Одна вкладка = один `WebContentsView` с `session = ctx.sessions.get(containerId)`, `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, `backgroundThrottling: true`, `spellcheck: false`.
 - `window.open`/target=_blank → `setWindowOpenHandler` возвращает `{action:'allow', createWindow: opts => новая вкладка в том же контейнере (сохраняет opener)}`; ссылки с Ctrl/средней кнопкой — фоновая вкладка.
 - Ленивое восстановление: восстановленные вкладки создаются `lazy` (без view) — view создаётся при первой активации.
-- Выгрузка: вкладка неактивна дольше `settings.performance.discardAfterMin` (0 = выкл), не играет звук, не закреплена → `discard` (view уничтожается, TabInfo остаётся). Активация → загрузка заново.
-- Сессия вкладок пишется в `session.json` (url, title, containerId, pinned, активная) с дебаунсом.
+- Выгрузка: вкладка неактивна дольше `settings.performance.discardAfterMin` (0 = выкл), не играет звук, не закреплена, не грузится → `discard` (view уничтожается, TabInfo остаётся). Активация → загрузка заново. Таймер не выгружает вкладку с открытыми DevTools (в панели или отдельном окне), с эмуляцией устройства и под guard фичи (`ctx.tabs.addDiscardGuard`); ручная «Выгрузить из памяти» работает всегда.
+- Сессия вкладок пишется в `session.json` (url, title, containerId, pinned, favicon, история переходов до 30, активная; `favicons` — data:URL значков ≤ 8 КБ, чтобы при старте не ходить за ними в сеть) с дебаунсом.
 - Закрытые вкладки — стек из 25 для Ctrl+Shift+T.
 - Навигация во вкладке на `kosmo://` с http(s)-страницы блокируется (`will-navigate`); `kosmo://ui/*` во вкладках не обслуживается.
 
@@ -237,7 +243,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 
 ## 8–10. Overlay, panel, commands (main)
 
-- `ctx.overlay.open(opts)`, `close()`, `isOpen()`, `send(type, data)`; события `ctx.overlay.on('event', (type, data) => {})`.
+- `ctx.overlay.open(opts)`, `close()`, `isOpen()`, `send(type, data)`, `toast(text, opts)` (немодальный тост у нижнего края области вкладки; при открытом поповере — внутри него); события `ctx.overlay.on('event', (type, data, name) => {})`. Тосты из chrome (`KUI.toast`) тоже идут через overlay — сам chrome закрыт видом вкладки.
 - `ctx.panel.open(toolId?)`, `close()`, `toggle(toolId?)`, `isOpen()`, `tool()`, `setWidth(px)`, `devtoolsView` (WebContentsView для DevTools — его настраивает фича devtools), `send(channel, payload)`; события `'tool-changed'`, `'opened'`, `'closed'`. Ширина в `settings.ui.panelWidth`.
 - `ctx.commands.register({ id, title, keys?: ['Ctrl+K'], category, when?: () => bool, run: (args, ctx) => {} })`, `run(id, args)`, `list()`. Горячие клавиши ловятся в `before-input-event` ВСЕХ webContents (chrome, вкладки, панель, overlay). Core регистрирует базовые: новая вкладка Ctrl+T, закрыть Ctrl+W, восстановить Ctrl+Shift+T, след./пред. Ctrl+Tab/Ctrl+Shift+Tab, Ctrl+1..9, адресная строка Ctrl+L/F6/Alt+D, обновить F5/Ctrl+R, жёсткое Ctrl+Shift+R/Ctrl+F5, назад/вперёд Alt+←/→, масштаб Ctrl+=/−/0, панель F12 (DevTools) и Ctrl+Shift+I, поиск по странице Ctrl+F, полноэкранный F11, настройки Ctrl+,.
 
@@ -273,7 +279,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 
 ## 12. tab-preload (страницы во вкладках)
 
-`preload-composer.js` при старте склеивает `src/preload/tab/*.js` (по имени) + части от `ctx.preload.addPart` в `userData/gen/tab-preload.js`. Каждая часть оборачивается в `try { (function(KOSMO){ ... })(KOSMO) } catch(e) {}`; `KOSMO` — общий объект части preload: `{ ipcRenderer, contextBridge, webFrame, isInternal, host }`.
+`preload-composer.js` при старте склеивает `src/preload/tab/*.js` (по имени) + части от `ctx.preload.addPart` в `userData/gen/tab-preload.js`. Каждая часть оборачивается в `try { (function(KOSMO){ ... })(KOSMO) } catch(e) {}`; `KOSMO` — общий объект части preload: `{ ipcRenderer, contextBridge, webFrame, isInternal, host, protocol, isTop, INTERNAL_HOSTS, send, invoke, sendSync }` (`send/invoke/sendSync` — только `kosmo-tab:*`). Фактический список частей — в Приложении.
 - Preload работает в **изолированном мире** с `sandbox:true`: `require('electron')` → только `ipcRenderer, contextBridge, webFrame`. Модули node_modules недоступны — библиотеки (Dark Reader) встраиваются текстом через `addPart`.
 - `00-core.js`: если `location.protocol === 'kosmo:'` и хост в списке внутренних — `contextBridge.exposeInMainWorld('kosmo', {...})`. На обычных сайтах в главный мир страницы НИЧЕГО не выставляется.
 - Каналы из вкладок — только `kosmo-tab:*`, данные недоверенные, main проверяет и ограничивает размеры.
@@ -290,14 +296,15 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
   ```js
   ctx.cdp.ensure(tabId) → Promise<void>           // подключить debugger к вкладке
   ctx.cdp.network(tabId, { filter, type /* api|all|doc|js|css|img */, limit }) → Entry[]
-  ctx.cdp.entry(tabId, requestId) → Entry & { requestHeaders, responseHeaders, postData }
+  ctx.cdp.entry(tabId, requestId) → Promise<Entry & { requestHeaders, responseHeaders, postData }>
   ctx.cdp.body(tabId, requestId) → { body, base64Encoded, truncated }
   ctx.cdp.console(tabId, { level, limit }) → [{ ts, level, text, url, line }]
   ctx.cdp.send(tabId, method, params) → результат CDP
   ctx.cdp.on('entry', (tabId, entry) => {})  ctx.cdp.clear(tabId)
   Entry = { id, ts, method, url, status, type, mime, size, timeMs, fromCache, initiator, failed, errorText }
   ```
-- `ctx.bridge.pageFetch(tabId, {url, method, headers, body})` (владелец claude-bridge) — fetch в контексте страницы (с её cookies), используется и панелью «Сеть» для повтора запроса.
+  **Факт:** `entry()` асинхронный (`await ctx.cdp.entry(...)` — тело запроса может дочитываться); есть доп. методы и события — см. Приложение.
+- `ctx.cdp.pageFetch(tabId, {url, method, headers, body})` (владелец **devtools**, `cdp-hub.js`) — fetch в контексте страницы (с её cookies) через CDP-мир `kosmolet-fetch`, не ждёт конца загрузки страницы; им пользуется панель «Сеть» («Повторить», «Изменить и отправить»). У моста есть своя обёртка `ctx.bridge.pageFetch` для MCP-инструмента `page_fetch`.
 
 ---
 
@@ -310,10 +317,104 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - **Без «нейрослопа»**: никаких эмодзи в интерфейсе, искорок/✨ у Claude, лишних стрелочек, номерков, подсказок-пузырей поверх всего. Иконка Claude — простой знак (не искорка).
 - Все цвета — через переменные `tokens.css`: `--k-bg, --k-bg-elev, --k-bg-sunken, --k-surface, --k-surface-hover, --k-border, --k-border-strong, --k-text, --k-text-dim, --k-text-faint, --k-accent, --k-accent-hover, --k-accent-soft, --k-on-accent, --k-ok, --k-warn, --k-danger, --k-focus, --k-shadow, --k-radius, --k-radius-sm, --k-font, --k-mono, --k-fs, --k-tab-h, --k-bar-h`.
 - Тексты — короткие, по-русски, без канцелярита. Состояния: пусто/загрузка/ошибка есть у каждого списка.
+- **Факт (после правок 22.10):** в `tokens.css` есть и другие токены (полный список — в файле). Важные добавки: `--k-text-faint` — второстепенный текст с контрастом ≥ 4,5:1; `--k-text-ghost` — только декор (иконки пустых состояний, «+» в сочетаниях), не для текста; `--k-accent-fill` — заливка основной кнопки и счётчиков (theme.js затемняет акцент до контраста ≥ 4,5 с белым); `--k-accent-text`, `--k-backdrop` (затемнение под модальным слоем, им же затемняются нативные кнопки окна), `--k-shadow-pop`.
+- **Правило поповеров:** переключатель в шапке поповера фичи означает «этот сайт» (тема, блокировщик); глобальное включение/выключение — кнопкой в подвале («Выключить везде»).
+- Сочетания клавиш в интерфейсе — через `KUI.kbd(combo)` (клавиши раздельно, тонкий «+»); шапка «текущий сайт» в инструментах панели — `api.siteHeader({icon, title, sub, actions})`.
 
 ## 15. Производительность (бюджет)
 
 - Холодный старт до видимого окна с вкладкой ≤ 1.5 с на этой машине; chrome UI ≤ 150 КБ JS без фреймворков.
-- Панель и overlay создаются лениво (при первом открытии). Инструменты панели монтируются при первом показе.
+- Панель создаётся лениво (при первом открытии); overlay прогревается после загрузки первой вкладки (или через 4 с), чтобы первая подсказка адресной строки не ждала. Панель и overlay — `sandbox:true`, chrome — `sandbox:false` (нужен `electron-chrome-extensions`). Инструменты панели монтируются при первом показе.
 - CDP-захват по умолчанию только `api` (XHR/Fetch + документ), тела ответов — лениво (`Network.getResponseBody` по запросу), буфер `maxTotalBufferSize` 64 МБ.
 - Никаких setInterval чаще 1 с в фоне; рассылки состояния — с троттлингом.
+
+---
+
+## Приложение: фактические API и каналы фич
+
+Сводка на 22.10.2026 по `docs/features-reports.md`, отчётам починщиков и коду. При расхождении верен код. Порядок init фич (`main.js`): `platform, themes, cdp-hub, devtools, ux-chrome, claude-bridge, claude-terminal, tools-pack`.
+
+### А1. API фич в ctx
+
+| Ключ | Владелец | Методы |
+|---|---|---|
+| `ctx.history` | ux-chrome | `search(q, limit)`, `add(entry)`, `remove(url)`, `clear(opts)`, `recent(limit)`, `top(limit)`, `get(url)`, `count()`, `onChange(cb)`. Одна запись на адрес, до 10 000; файл пишется не чаще раза в 15 с |
+| `ctx.bookmarks` | ux-chrome | `list(folder)`, `add(o)`, `remove(idOrUrl)`, `update(id, patch)`, `move(id, index, folder)`, `has(url)`, `find(url)` |
+| `ctx.downloads` | ux-chrome | `list()`, `dir()`, `summary()` |
+| `ctx.themes` | themes | `siteConfig(url)` (`enabled` — итоговое вкл/выкл, `params.engine`), `toggleSite(host, v)`, `setSite(host, patch)`, `removeSite`, `resetSite`, `sites()`, `siteKey(hostOrUrl)`, `autoColors()`; dev: `measure`, `metrics`, `fetchStats` |
+| `ctx.cdp` | devtools (`cdp-hub.js`) | §13 плюс: **`entry()` — Promise**, `body()` — Promise; `pageFetch(tabId, {url, method, headers, body, timeoutMs})` → `{ok, status, statusText, headers, body, base64Encoded, size, truncated, timeMs, url, redirected}`; `evalInWorld(tabId, expr, {world: 'page' или имя, timeoutMs, userGesture})` — Page.createIsolatedWorld + Runtime.evaluate, не ждёт конца загрузки; `info`, `list`, `watch(tabId, on)`, `setPaused`, `requireNetwork(tabId, on)`, `captureTab`, `wsFrames`, `raw`, `rawBody`, `postData`, `timingOf`, `isAttached`, `flush`. События `on('entry' / 'batch' / 'console' / 'attached' / 'detached' / 'cleared')` |
+| `ctx.devtools` | devtools | `dock` (`docks()`, `openWindow`, `dockBack`, `pickElement`, `inspectAt(tabId, {x, y})`, `noteMenu`, `state`); `emu` (`get`, `set(tabId, patch)`, `reset`, `isActive(tabId)`, `summary`, `inputScale`, `viewFactor(tabId, zoom)`, `DEVICES`, `NETWORKS`); `storage`; `net`. Живых встроенных DevTools не больше 2, скрытые закрываются через 45 с |
+| `ctx.bridge` | claude-bridge | `toInbox({title, markdown, host})` → `{path}`, `mcpConfigPath()`, `status()`, `pageFetch(tabId, o)`, `sendPage(tabId)`, `pick(tabId)`, `lastPicked()`, `activity(limit)`, `connectClaudeCode({dryRun})`, `command()`, `url()`, `tools()`, `callTool(name, args)` (отладка) |
+| `ctx.terminal` | claude-terminal | `pasteToClaude(text)` → bool (только в живую сессию Claude с bracketed paste), `open(profile)` → id (`claude`, `powershell`, `cmd`, `bash`), `create(o)`, `list()`, `write`, `kill(id)`, `restart(id, o)`, `show`, `info`, `describe(profile)` |
+| `ctx.adblock` | platform | `isEnabledFor(url)`, `blockedCount(tabId)`, `status()`, `update()` |
+| `ctx.extensions` | platform | `list()`, `install(id, containerId)`, `remove(id)`, `instance(containerId)` |
+| `ctx.platform` | platform | `{modal, adblock, extensions, permissions, containers}` — внутренние модули (`permissions.queue()`, `respond`, `revoke`, `listSaved`, `cancelTab`) |
+| `ctx.toolsPack` | tools-pack | `snippets()`, `builtins()`, `runSnippet(tabId, code, world)` → `{ok, ms, logs, result, error, world, url}`, `xray(tabId)` → `{sections, notes, …}`, `matchUrl(pattern, url)` |
+
+**Точки расширения ядра, добавленные фичами и починщиками:**
+- `ctx.commands.addBypass((input, source, wc, cmd) => bool)` — клавиша уходит в webContents, команда не выполняется (терминал: Ctrl/Alt+буква; DevTools: Ctrl+L). `comboFromInput(input)` экспортируется из `commands.js`.
+- `ctx.commands.addTabMenuProvider((tab) => MenuItemOptions[])` — пункты в меню вкладки после «Выгрузить из памяти».
+- `ctx.tabs.addDiscardGuard((tab) => bool)` → отписка; `ctx.tabs.discardBlocked(tab)`. Ещё у вкладок: `markClaude`, `realizeActive`, `openOrActivate`, `flushSession`, `focus`, события `focus` и `target-url`; поля TabInfo `containerName`, `active`, `index`, `error`.
+- `ctx.overlay.toast(text, opts)`; `ctx.windows.setTitleBarColors(c | null)`, `setTitleBarDim(on)`, `uiUrl()`; `ctx.panel.createDevtoolsView()`, `setDevtoolsView(v)`, `devtoolsViewIfCreated`.
+- `ctx.permissions.setHandler((kind, info) => bool | undefined | Promise)`, `ctx.uiPreload.addModule(path)` (только в init), `ctx.sessions.addVendor(pkg)`, `ctx.settings.addDefaults(obj, {enums})`, `ctx.settings.peek(path)`, `ctx.contextMenu.build(...)` (для проверок).
+- Интерфейс: `KChrome.toggleOverlay(type, data, anchor, opts)`, `KUI.kbd(combo)`, `KUI.setToastHandler(fn)`, в api `KPanel` — `siteHeader({icon, title, sub, subTitle, actions})`, `KOverlay.ui.header/menu`, тип overlay `toast`.
+
+**Ветки настроек от фич:** `claude.shell` (powershell, cmd, bash), `devtools.preserveLog`, `devtools.console`, `siteThemes.colorScheme` (system, dark, light), `siteThemes.rev` (миграции; rev 2 — wildberries.ru на движке `filter`). Значения `claude.claudeCommand` (`claude…` без аргументов или существующий абсолютный .exe/.cmd/.bat/.com), `claude.inboxDir`, `claude.terminalCwd`, `downloads.dir` (`''` или абсолютная папка) проверяются при записи.
+
+### А2. Каналы IPC по фичам
+
+| Фича | Запросы (`invoke`) | События main → UI |
+|---|---|---|
+| core (сверх §4) | `kosmo:settings.remove`, `kosmo:app.info`, `kosmo:panel.state`, `kosmo:overlay.toast`, `kosmo:overlay.update`, `kosmo:tabs.closeOthers/closeRight/discard/focus/contextMenu`, `kosmo:containers.list` | `kosmo:chrome.command`, `kosmo:find.result`, `kosmo:overlay.show/hide/closed/state/toast` |
+| ux-chrome | `kosmo:ux.*` (suggest, newtab, newtabHide, focusOmnibox, palette, paletteRun, defaultBangs), `kosmo:history.*` (search, page, recent, remove, clear), `kosmo:bookmarks.*` (list, find, add, update, remove, move), `kosmo:downloads.*` (list, open, show, cancel, pause, resume, remove, retry, clear, markSeen, openDir, chooseDir) | `kosmo:history.changed`, `kosmo:bookmarks.changed`, `kosmo:downloads.changed`. Типы overlay: omnibox, palette, bookmark-edit, bm-menu, bm-folder, downloads |
+| themes | `kosmo:themes.*` (site, setSite, toggleSite, removeSite, resetSite, sites, autoColors); из вкладок: `kosmo-tab:site-theme.get` и `.lib` (sendSync), `.fetch` (прокси CSS и шрифтов: только http(s), без локальных и частных адресов, редиректы перепроверяются, до 5 МБ и 10 с), `.metric` | `kosmo:themes.changed`, `kosmo:themes.toggled`; во вкладку `kosmo-tab:site-theme.update` |
+| devtools | `kosmo:devtools.*` (state, openWindow, dockBack, pick, info, relaunch), `kosmo:emu.*` (get, set, reset), `kosmo:net.*` (list, entry, body, fetch, clear, pause, capture, watch, exportHar, searchBodies, toClaude), `kosmo:storage.*` (cookies, setCookie, removeCookie, clearCookies, cookieHeader, exportCookies, importCookies, web, webSet, webRemove, webClear, clearSite) | `kosmo:devtools.dock`, `kosmo:devtools.emu`, `kosmo:devtools.stage`, `kosmo:devtools.net` |
+| claude-bridge | `kosmo:bridge.*` (status, activity, clearActivity, setAccess, connectClaudeCode, command, regenerateToken, tools, openLog, pickDir, openDir, pick, sendToClaude) — из внутренних страниц только settings; из вкладок `kosmo-tab:picker.result` | `kosmo:bridge.activity` (`{entry}` или `{cleared:true}`), `kosmo:bridge.status`, `kosmo:bridge.toast`, `kosmo:bridge.picker`, `kosmo:bridge.picked`, `kosmo:bridge.showLog`; во вкладку `kosmo-tab:picker.start/at/stop` |
+| claude-terminal | `kosmo:term.*` (create, list, write, resize, kill, restart, replay `{withSeq}`, info, clipboard, pickCwd; `focusState` — через send) | `kosmo:term.data`, `kosmo:term.exit`, `kosmo:term.sessions`, `kosmo:term.reset`, `kosmo:term.show` |
+| platform | `kosmo:ext.*` (list, state, reload, remove, options, loadUnpacked, openFolder, openStore), `kosmo:adblock.*` (state, setEnabled, setSite, update), `kosmo:perm.*` (list, respond, revoke), `kosmo:containers.*` (stats, clearData, remove, chipMenu, newTab), `kosmo:privacy.*` (clearCache, clearCookies, uaInfo), `kosmo:platform.modalRespond` | `kosmo:adblock.counts`, `kosmo:adblock.status`, `kosmo:ext.changed`, `kosmo:perm.queue` |
+| tools-pack | `kosmo:snippets.*` (list, save, remove, run, runPicked, takeLast, autoLog, autoResult), `kosmo:xray.*` (run, toClaude), `kosmo:tools.*` (metrics, discardTab, paths, openFolder — открыты и внутренним страницам) | `kosmo:snippets.changed`, `kosmo:snippets.auto`, `kosmo:snippets.ran` |
+
+### А3. Изолированные миры
+
+| Мир | Кто | Зачем |
+|---|---|---|
+| 999 (мир preload) | core, themes | tab-preload; Dark Reader исполняется в нём (`executeJavaScriptInIsolatedWorld(999)`), его помощник — в главном мире через `webFrame.executeJavaScript` |
+| CDP `kosmolet-snapshot` (запасной 1002) | claude-bridge | снимок страницы и ref-ы (`page-snapshot.js`, VERSION 11) |
+| CDP `kosmolet-eval` (запасной 1003) | claude-bridge | `eval_js` |
+| CDP `kosmolet-fetch` (запасные 1717 в cdp-hub и 1004 в мосте) | devtools, claude-bridge | `ctx.cdp.pageFetch`, `page_fetch` |
+| CDP `kosmolet-storage` (запасной 1718) | devtools | localStorage и sessionStorage в «Хранилище» |
+| CDP `kosmolet-snippet` (запасной 1818) | tools-pack | сниппеты в режиме «Изолированный» и Рентген; режим «Страница» — главный мир |
+| CDP `kosmolet-cdp` | devtools | мир по умолчанию у `ctx.cdp.evalInWorld` |
+
+Запасные числовые миры — путь Electron (`executeJavaScriptInIsolatedWorld`): он ждёт конца загрузки страницы. Основной путь — CDP. Автосниппеты намеренно идут путём Electron (после загрузки).
+
+### А4. tab-preload (`userData/gen/tab-preload.js`)
+
+| Часть | Владелец | Что делает |
+|---|---|---|
+| `00-core.js` | core | `window.kosmo` только для главного фрейма внутренних хостов |
+| `19-darkreader-lib` (addPart) | themes | загрузчик: исходник Dark Reader (355 КБ) берётся из main через sendSync, только если тема включена |
+| `20-site-theme.js` | themes | тёмная тема сайта (движки dynamic и filter), свой CSS, защита от белой вспышки |
+| `30-picker.js` | claude-bridge | пикер «Показать Claude элемент» (рамка в закрытом shadow root) |
+| `41-tools-favicon` (addPart) | tools-pack | знак Космолёта как значок внутренних страниц |
+
+Отдельные frame-preload сессий (не части tab-preload): `kosmo-adblock-cosmetic` — своя копия косметики ghostery (`features/platform/adblock-cosmetic-preload.js`, без `unload`), и preload-скрипты `electron-chrome-extensions` и Web Store. В ui-preload фичи добавляют модули через `ctx.uiPreload.addModule` (platform: `ui-preload-actions.js` для `<browser-action-list>`).
+
+### А5. Хранилища в userData
+
+| Файл | Владелец |
+|---|---|
+| `settings.json`, `session.json`, `window-state.json`, `gen/tab-preload.js`, `gen/compile-cache/` (кэш компиляции модулей main) | core |
+| `history.json`, `bookmarks.json`, `downloads.json` | ux-chrome |
+| `claude-activity.json` (500 записей), `gen/claude-mcp.json` (адрес и токен для `claude --mcp-config` и `mcp-call.mjs --profile`) | claude-bridge |
+| `adblock-engine.bin` (обновление раз в 7 дней), `extensions/`, `extensions-unpacked.json`, `containers-purge.json` | platform |
+| `snippets.json` | tools-pack |
+| `main-stdout.log`, `main-stderr.log` (только при запуске через `start-dev.ps1`) | dev |
+
+Вне userData: inbox Claude — `settings.claude.inboxDir` или `Документы\Космолёт\claude-inbox`; загрузки — `settings.downloads.dir` или системная папка «Загрузки». Cookies и кэш контейнеров — `Partitions/c-<id>` (Chromium).
+
+### А6. Dev и проверки
+
+- Флаги: `--dev`, `--profile`, `--dev-port`, `--cdp-port`, `--mcp-port`, `--no-restore`, `--open`; только в dev — `--offscreen`, `--ui-root`. В dev отключена окклюзия окон (`CalculateNativeWinOcclusion`), лог main копится и пишется асинхронно (остаток — при выходе), есть команда «Исследовать интерфейс» `Ctrl+Alt+Shift+I`.
+- `tools/start-dev.ps1 … [-OnScreen] [-NoRestore] [-Open <url>] [-UiRoot <папка>]`; `tools/dev.mjs --port <n> eval "<код>" | eval --file <путь> | shot [файл] | logs [n] | quit | health`; `tools/smoke.mjs <dev> <cdp>`; `tools/mcp-call.mjs --profile <p>` (или `--port`, `--token`) `list | call <tool> '<json>'`.
+- Особенности проверок: `render-process-gone` после `forcefullyCrashRenderer` на этой машине приходит через 0,4–19 с (smoke ждёт до 25 с); тест `toggleOverlay` в smoke чувствителен к загрузке CPU (паузы 100–300 мс).

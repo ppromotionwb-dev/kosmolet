@@ -597,6 +597,15 @@ async function run(ctx, tab) {
   if (probeRes && probeRes.__error) notes.push('Глобальные переменные страницы прочитать не удалось: ' + probeRes.__error);
   if (hdr && hdr.source === 'fetch') notes.push('Заголовки получены повторным запросом страницы (запись сети для вкладки не велась).');
   if (dom.nav && dom.nav.name && noHash(dom.nav.name) !== noHash(dom.url)) notes.push('Скорость — для первой загрузки документа (' + dom.nav.name + '), адрес с тех пор сменился без перезагрузки.');
+  // Замер искажает обработка страницы самим Космолётом (правка от themes/platform: INT-7).
+  try {
+    const th = ctx.themes && ctx.themes.siteConfig ? ctx.themes.siteConfig(url) : null;
+    if (th && th.dark && th.params && th.params.engine === 'dynamic') {
+      notes.unshift('Скорость искажена тёмной темой Космолёта: Dark Reader перекрашивает стили страницы, поэтому FCP, LCP и загрузка хуже, чем у посетителей. Для точного замера выключите тему на сайте (Alt+Shift+D) и перезагрузите страницу.');
+    }
+    const blocked = ctx.adblock && ctx.adblock.isEnabledFor && ctx.adblock.isEnabledFor(url) ? ctx.adblock.blockedCount(tab.id) : 0;
+    if (blocked) notes.push(`Блокировщик рекламы отсёк запросов: ${blocked}. В «Ресурсах» и «Сторонних доменах» их нет — у посетителей без блокировщика страница тяжелее.`);
+  } catch (_) { /* заметки необязательны */ }
   return {
     url: dom.url, title: dom.title || wc.getTitle(), host: dom.host, at: Date.now(), ms: Date.now() - t0, tabId: tab.id,
     sections: [seoSection(dom, hdr), techSection(dom, P), speedSection(dom), serverSection(dom, hdr), securitySection(dom, hdr)],

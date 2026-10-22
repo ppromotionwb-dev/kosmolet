@@ -5,7 +5,13 @@
   const U = window.KUI;
   const { h } = U;
   const $ = (id) => document.getElementById(id);
-  $('nt-logo').innerHTML = window.KIcons.get('orbit', 40, { stroke: 1.3 });
+  // Знак Космолёта (как assets/logo-small.svg, без подложки, в цветах темы) — тот же, что у вкладок и в «О Космолёте».
+  $('nt-logo').innerHTML = '<svg viewBox="10 14 236 196" width="68" height="56" aria-hidden="true" focusable="false">' +
+    '<defs><mask id="nt-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256"><rect width="256" height="256" fill="#fff"/>' +
+    '<path d="M238 140A110 42 0 0 1 18 140" transform="rotate(-20 128 140)" fill="none" stroke="#000" stroke-width="46" stroke-linecap="round"/></mask></defs>' +
+    '<path class="nt-ring" d="M18 140A110 42 0 0 1 238 140" transform="rotate(-20 128 140)" fill="none" stroke-width="18" stroke-linecap="round"/>' +
+    '<g mask="url(#nt-cut)"><path class="nt-ship" d="M0 -108L52 60L0 34Z M0 -108L-52 60L0 34Z" transform="translate(126 118) rotate(28)"/></g>' +
+    '<path class="nt-ring" d="M238 140A110 42 0 0 1 18 140" transform="rotate(-20 128 140)" fill="none" stroke-width="18" stroke-linecap="round"/></svg>';
   $('nt-icon').innerHTML = window.KIcons.get('search', 18);
 
   function focusOmnibox(text) {

@@ -28,6 +28,26 @@
     return null;
   }
 
+  // Общая шапка «текущий сайт» для инструментов (UX-16): иконка 32px в квадрате, хост, подзаголовок, кнопки справа.
+  // siteHeader({icon, title, sub, subTitle, actions: [Node]}) → {el, set({...}), actions}
+  function siteHeader(o) {
+    const ic = h('span.kp-site-ic');
+    const title = h('div.kp-site-title.k-ellipsis');
+    const sub = h('div.kp-site-sub.k-ellipsis');
+    const actions = h('div.kp-site-actions');
+    const el = h('header.kp-site', ic, h('div.kp-site-text', title, sub), actions);
+    function set(p) {
+      p = p || {};
+      if (p.icon !== undefined) { U.clear(ic); if (p.icon) ic.appendChild(typeof p.icon === 'string' ? U.icon(p.icon, 18) : p.icon); }
+      if (p.title !== undefined) title.textContent = p.title || '';
+      if (p.sub !== undefined) { sub.textContent = p.sub || ''; sub.hidden = !p.sub; }
+      if (p.subTitle !== undefined) sub.title = p.subTitle || '';
+      if (Array.isArray(p.actions)) { U.clear(actions); for (const a of p.actions) if (a) actions.appendChild(a); }
+    }
+    set(Object.assign({ sub: '' }, o || {}));
+    return { el, set, actions };
+  }
+
   function makeApi(t) {
     const offs = [];
     return {
@@ -42,7 +62,7 @@
       isVisible: () => visible && activeId === t.def.id,
       close: () => fire('kosmo:panel.close', {}),
       setTool: (id) => show(id),
-      toast: U.toast, h, icon: U.icon, empty: U.empty,
+      toast: U.toast, h, icon: U.icon, empty: U.empty, siteHeader,
       _offs: offs
     };
   }
@@ -171,19 +191,28 @@
     else if (a && prevUrl !== a.url) bus.emit('tab', a, { reason: 'navigated', prevId });
   }
 
-  // первый инструмент: из настроек (ui.panelTool), пока main не прислал layout.state
+  // первый инструмент — тот, что сейчас выбран в main (kosmo:panel.state), а не первый зарегистрированный.
+  // Ждём DOMContentLoaded: он наступает после ВСЕХ defer-скриптов инструментов. readyState во время их выполнения
+  // уже 'interactive', и ответ main мог прийти между скриптами — тогда панель откатывалась на DevTools.
   if (U.hasKosmo) {
+    let scriptsDone = document.readyState === 'complete';
+    let mainTool;            // undefined — ответа ещё нет
+    const pick = () => {
+      if (!scriptsDone || mainTool === undefined) return;
+      initPending = false;
+      if (activeId) return;
+      if (typeof mainTool === 'string' && tools.has(mainTool)) show(mainTool, { fromMain: true });
+      else if (wantedId && tools.has(wantedId)) show(wantedId, { fromMain: true });
+      else show(firstTool(), { fromMain: true });
+    };
+    if (!scriptsDone) document.addEventListener('DOMContentLoaded', () => { scriptsDone = true; pick(); }, { once: true });
     // панель создаётся лениво, когда вкладки уже есть: до первого kosmo:tabs.state берём список сами
     invoke('kosmo:tabs.list', {}).then((r) => { if (r && !tabs.list.length) applyTabs(r); }).catch(() => {});
     invoke('kosmo:layout.get', {}).then((l) => { if (l) { Object.assign(layout, l); if (l.panelOpen !== undefined) setVisible(!!l.panelOpen); } }).catch(() => {});
-    invoke('kosmo:settings.get', { path: 'ui.panelTool' }).then((tool) => {
-      // ответ может прийти раньше, чем defer-скрипты инструментов зарегистрируются (themes: «Свой CSS…» открывал DevTools)
-      const pick = () => {
-        initPending = false;
-        if (!activeId) show(typeof tool === 'string' && tools.has(tool) ? tool : firstTool(), { fromMain: true });
-      };
-      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pick, { once: true }); else pick();
-    }).catch(() => { initPending = false; if (!activeId) show(firstTool(), { fromMain: true }); });
+    invoke('kosmo:panel.state', {})
+      .then((st) => (st && typeof st.tool === 'string' ? st.tool : invoke('kosmo:settings.get', { path: 'ui.panelTool' })))
+      .then((tool) => { mainTool = typeof tool === 'string' ? tool : null; pick(); })
+      .catch(() => { mainTool = null; pick(); });
   }
   function firstTool() { const b = tabsEl.firstElementChild; return b ? b.dataset.id : null; }
 

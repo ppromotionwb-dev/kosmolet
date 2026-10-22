@@ -16,7 +16,37 @@
     { id: 'cmd', title: 'cmd', icon: 'terminal' },
     { id: 'bash', title: 'Git Bash', icon: 'terminal' }
   ];
-  const TOOL_RU = { pick_element: 'элемент', send_to_claude: 'отправка' };
+  // Названия инструментов MCP и частые ошибки — по-русски (оригинал — во всплывающей подсказке).
+  const TOOL_RU = {
+    pick_element: 'Элемент', send_to_claude: 'Отправка', tabs_list: 'Вкладки', page_info: 'Страница', snapshot: 'Снимок',
+    get_html: 'HTML', find: 'Поиск', screenshot: 'Скриншот', network_requests: 'Запросы', network_request: 'Запрос',
+    console_logs: 'Консоль', picked_element: 'Элемент', tab_open: 'Новая вкладка', tab_select: 'Вкладка', tab_close: 'Закрыть вкладку',
+    navigate: 'Переход', click: 'Клик', type: 'Ввод', press_key: 'Клавиши', scroll: 'Прокрутка', hover: 'Наведение',
+    select_option: 'Выбор', wait_for: 'Ожидание', eval_js: 'JavaScript', page_fetch: 'Запрос из страницы',
+    cookies_get: 'Cookies', cookies_set: 'Cookies: запись', storage_get: 'Хранилище',
+  };
+  const ERR_RU = [
+    [/^ref \S+ not found/i, 'Элемент не найден — страница изменилась'],
+    [/access mode is "read"/i, 'Запрещено: у Claude доступ «Только чтение»'],
+    [/access is off/i, 'Доступ Claude выключен'],
+    [/^tab \S+ not found/i, 'Вкладка не найдена'],
+    [/internal page/i, 'Служебная страница — Claude работает только с сайтами'],
+    [/not visible/i, 'Элемент не виден на странице'],
+    [/outside the viewport/i, 'Элемент за пределами экрана'],
+    [/did not respond in time|timeout|timed out/i, 'Страница не ответила вовремя'],
+    [/^JS error/i, 'Ошибка JavaScript на странице'],
+    [/^fetch failed/i, 'Запрос не выполнен'],
+    [/crashed/i, 'Вкладка упала — её нужно перезагрузить'],
+    [/no active tab/i, 'Нет активной вкладки'],
+    [/URL scheme is not allowed/i, 'Такой адрес Claude открывать нельзя'],
+    [/could not focus/i, 'Не удалось поставить курсор в поле'],
+  ];
+  function errRu(msg) {
+    const s = String(msg || '');
+    for (const [re, ru] of ERR_RU) if (re.test(s)) return ru;
+    return s;
+  }
+  const toolRu = (t) => TOOL_RU[t] || t || '—';
   const LOG_LIMIT = 300;
   const LS = 'kosmo.claude.';
   const ls = {
@@ -771,14 +801,14 @@
 
     function logRow(e) {
       const ok = e.ok !== false && !e.error;
-      const tool = h('span.kc-tool', TOOL_RU[e.tool] || e.tool || '—');
+      const tool = h('span.kc-tool', { title: e.tool || '' }, toolRu(e.tool));
       const main = h('div.kc-row-main', tool, e.by === 'user' ? h('span.kc-by', 'вы') : null, h('span.kc-args', brief(e)));
       const row = h('div.kc-row' + (ok ? '' : '.err'), { role: 'listitem' },
         h('span.kc-time', fmtTime(e.ts)), main,
-        h('span.kc-tab', { title: e.tabId != null ? 'Вкладка ' + e.tabId : '' }, e.tabId != null ? '#' + e.tabId : ''),
+        h('span.kc-tab', { title: e.tabId != null ? 'Вкладка #' + e.tabId + (e.tabTitle ? ' — ' + e.tabTitle : '') : '' }, e.tabId != null ? (e.tabTitle || '#' + e.tabId) : ''),
         h('span.kc-ms', fmtMs(e.ms)),
         h('span.kc-st', { title: ok ? 'Готово' : 'Ошибка' }, U.icon(ok ? 'check' : 'x', 14)));
-      if (!ok && e.error) row.appendChild(h('div.kc-row-err', String(e.error)));
+      if (!ok && e.error) row.appendChild(h('div.kc-row-err', { title: String(e.error) }, errRu(e.error)));
       row.addEventListener('click', (ev) => {
         if (window.getSelection && String(window.getSelection())) return;
         const d = row.querySelector('.kc-row-details');

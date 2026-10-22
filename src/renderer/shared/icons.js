@@ -103,6 +103,11 @@
     'play': '<path d="M6 3l14 9-14 9z"/>',
     'pause': '<rect width="4" height="16" x="6" y="4" rx="1"/><rect width="4" height="16" x="14" y="4" rx="1"/>',
     'square': '<rect width="14" height="14" x="5" y="5" rx="2"/>',
+    // Знак Космолёта (assets/logo-small.svg без подложки): задняя половина кольца, корабль, передняя половина.
+    'kosmolet': '<g transform="translate(-0.35 1.08) scale(0.0965)"><path d="M18 140A110 42 0 0 1 238 140" transform="rotate(-20 128 140)" stroke-width="20"/>' +
+      '<path d="M0 -108L52 60L0 34Z M0 -108L-52 60L0 34Z" transform="translate(126 118) rotate(28)" fill="currentColor" stroke="none"/>' +
+      '<path d="M238 140A110 42 0 0 1 18 140" transform="rotate(-20 128 140)" stroke-width="20"/></g>',
+    'app-window': '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/>',
     'volume': '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
     'volume-x': '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
     'globe': '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',

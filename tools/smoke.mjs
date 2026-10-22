@@ -182,7 +182,8 @@ for (const [bad, wait] of [['http://127.0.0.1:1/', 10000], ['https://nonexistent
 });
 await check('краш вкладки → полоса, перезагрузка', async () => {
   const id = await ev("const t=ctx.tabs.create({url:'https://example.com/?crash'}); await new Promise(r=>t.wc.once('did-finish-load', r)); t.wc.forcefullyCrashRenderer(); return t.id");
-  const crashed = await until(`return ctx.tabs.get(${id}).info.crashed`, 5000);
+  // render-process-gone на этой машине приходит через 0,4–19 с после forcefullyCrashRenderer (крах обрабатывает ОС, под нагрузкой дольше) — ждём до 25 с.
+  const crashed = await until(`return ctx.tabs.get(${id}).info.crashed`, 25000);
   await sleep(300);
   const bar = await chrome.eval("!document.querySelector('[data-bar-id=crash]').hidden");
   await chrome.eval("document.querySelector('[data-bar-id=crash] button').click()");

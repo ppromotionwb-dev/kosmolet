@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
 
 const ENGINES = ['dynamic', 'filter'];
 const SCHEMES = ['system', 'dark', 'light'];
@@ -35,8 +36,10 @@ const AUTO_COLORS = {
 const SITE_FIXES = {};
 
 // Безопасность прокси загрузки: данные недоверенные, только http(s), CSS и шрифты, ≤ 5 МБ, 10 с.
+// Хост проверяется на каждом шаге (и каждый редирект), имя — по его адресам из DNS: локальные и служебные сети — отказ.
 const FETCH_LIMIT = 5 * 1024 * 1024;
 const FETCH_TIMEOUT = 10000;
+const MAX_REDIRECTS = 5;
 const FETCH_CONCURRENCY = 6;
 const FETCH_QUEUE_LIMIT = 200;
 const MAX_URL = 8192;
@@ -112,15 +115,81 @@ function candidates(key) {
   return out;
 }
 
+// ---------- локальные адреса (прокси загрузки не должен ходить в localhost и локальную сеть) ----------
+// Хост без скобок IPv6 и без точки в конце (localhost. = localhost).
+function normHost(h) { return String(h || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, ''); }
+
+function parseV4(s) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (!m) return null;
+  const p = m.slice(1).map(Number);
+  return p.every((x) => x <= 255) ? p : null;
+}
+
+function privateV4([a, b, c]) {
+  return a === 0 || a === 10 || a === 127 || a >= 224 || // эта сеть, частная, loopback, multicast/резерв/broadcast
+    (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) || (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113);
+}
+
+// IPv6 → 8 слов по 16 бит (IPv4 в конце адреса тоже разбирается), null — не адрес.
+function parseV6(s) {
+  s = String(s || '').replace(/%.*$/, '');
+  if (!s.includes(':')) return null;
+  let tail = [];
+  const m4 = /:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (m4) {
+    const p = parseV4(m4[1]);
+    if (!p) return null;
+    tail = [(p[0] << 8) | p[1], (p[2] << 8) | p[3]];
+    s = s.slice(0, s.length - m4[1].length);
+    if (!s.endsWith('::')) s = s.slice(0, -1);
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const words = (x) => (x === '' ? [] : x.split(':').map((w) => (/^[0-9a-f]{1,4}$/i.test(w) ? parseInt(w, 16) : NaN)));
+  const head = words(halves[0]);
+  const back = halves.length === 2 ? words(halves[1]) : [];
+  const all = head.concat(back, tail);
+  if (all.some(Number.isNaN)) return null;
+  if (halves.length === 1) return all.length === 8 ? all : null;
+  const zeros = 8 - all.length;
+  return zeros >= 1 ? head.concat(new Array(zeros).fill(0), back, tail) : null;
+}
+
+function privateV6(w) {
+  const zero = (from, to) => w.slice(from, to).every((x) => x === 0);
+  const v4 = (i) => [w[i] >> 8, w[i] & 255, w[i + 1] >> 8, w[i + 1] & 255];
+  if (zero(0, 5) && w[5] === 0xffff) return privateV4(v4(6)); // ::ffff:a.b.c.d (IPv4-mapped)
+  if (zero(0, 6)) return true; // ::, ::1, ::a.b.c.d (IPv4-compatible)
+  if (w[0] === 0x64 && w[1] === 0xff9b) return privateV4(v4(6)); // NAT64
+  if (w[0] === 0x2002) return privateV4(v4(1)); // 6to4
+  if (w[0] === 0x2001 && (w[1] === 0 || w[1] === 0xdb8)) return true; // Teredo, документация
+  if ((w[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 — уникальные локальные
+  if ((w[0] & 0xffc0) === 0xfe80 || (w[0] & 0xffc0) === 0xfec0) return true; // link-local, site-local
+  return (w[0] & 0xff00) === 0xff00 || (w[0] === 0x100 && zero(1, 4)); // multicast, discard-only
+}
+
+function isIpLiteral(h) { h = normHost(h); return !!parseV4(h) || h.includes(':'); }
+
+// Адрес (из URL или из DNS) в локальной/служебной сети. Неразборчивое — считаем локальным.
+function isPrivateIp(ip) {
+  const s = normHost(ip);
+  const v4 = parseV4(s);
+  if (v4) return privateV4(v4);
+  const v6 = parseV6(s);
+  return v6 ? privateV6(v6) : true;
+}
+
+// Хост по строке: IP-адрес, localhost-имена, служебные зоны и имена без точки (компьютеры локальной сети).
+// Имена, которые резолвятся в локальные адреса (127.0.0.1.nip.io), ловит проверка по DNS в прокси загрузки.
 function isPrivateHost(h) {
-  h = String(h || '').toLowerCase().replace(/^\[|\]$/g, '');
+  h = normHost(h);
   if (!h) return true;
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.test')) return true;
-  if (h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') || h === '::') return h.includes(':');
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const a = +m[1], b = +m[2];
-  return a === 127 || a === 10 || a === 0 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+  if (isIpLiteral(h)) return isPrivateIp(h);
+  if (/^(0x[0-9a-f]+|\d+)$/i.test(h) || !h.includes('.')) return true;
+  return h === 'localhost' || /\.(localhost|local|internal|intranet|lan|home|corp|test|home\.arpa)$/.test(h);
 }
 
 function luminance(hex) {
@@ -144,6 +213,8 @@ module.exports = {
       ranges: { 'siteThemes.defaults.brightness': RANGE.brightness, 'siteThemes.defaults.contrast': RANGE.contrast },
     });
     // Ревизии ветки: 1 — wildberries.ru включён, цвета страниц по умолчанию «в тон интерфейсу».
+    // 2 — на wildberries.ru по умолчанию движок «Быстрый» (filter): Dark Reader на WB (≈250 таблиц стилей) замедлял
+    //     загрузку в 2–4 раза (LCP 3 → 11 с, +200 МБ на вкладку). Явно выбранный движок не трогаем.
     try {
       const rev = Number(S.peek('siteThemes.rev')) || 0;
       if (rev < 1) {
@@ -153,6 +224,11 @@ module.exports = {
         if (d.bg === '#14161c') S.set('siteThemes.defaults.bg', '');
         if (d.text === '#e6e6ea') S.set('siteThemes.defaults.text', '');
         S.set('siteThemes.rev', 1);
+      }
+      if (rev < 2) {
+        const wb = (S.peek('siteThemes.sites') || {})['wildberries.ru'];
+        if (isPlain(wb) && wb.engine == null) S.set(['siteThemes', 'sites', 'wildberries.ru'], Object.assign({}, wb, { engine: 'filter' }));
+        S.set('siteThemes.rev', 2);
       }
     } catch (e) { log('миграция настроек:', e.message); }
 
@@ -437,6 +513,16 @@ module.exports = {
       // Декодируем сами, без сети.
       src = src.replace(/const response = await fetch\(dataURL\);\s*blob = await response\.blob\(\);/,
         "try { const c = dataURL.indexOf(','); const type = dataURL.slice(5, c).split(';')[0] || 'text/plain'; blob = new Blob([decodeURIComponent(dataURL.slice(c + 1))], { type }); } catch (e) { return null; }");
+      // Без <meta name="darkreader"> в DOM сайта: метку видят SEO-сниппеты, Рентген, снимок для Claude и сами сайты.
+      // Её роль — уступить другому экземпляру Dark Reader (расширение): теперь уступаем по появлению его метки.
+      const reMarker = /function createDarkReaderInstanceMarker\(\) \{[^}]*?document\.head\.appendChild\(metaElement\);\s*\}/;
+      const reListener = /function addMetaListener\(\) \{\s*metaObserver = new MutationObserver\(\(\) => \{\s*if \(document\.querySelector\('meta\[name="darkreader-lock"\]'\)\) \{/;
+      const reRemove = /(["']\.darkreader--root-vars["']),\s*'meta\[name="darkreader"\]'/;
+      if (reMarker.test(src) && reListener.test(src) && reRemove.test(src)) {
+        src = src.replace(reMarker, 'function createDarkReaderInstanceMarker() {}')
+          .replace(reListener, 'function addMetaListener() { if (metaObserver) metaObserver.disconnect(); metaObserver = new MutationObserver(() => { if (document.querySelector(\'meta[name="darkreader-lock"], meta[name="darkreader"]\')) {')
+          .replace(reRemove, '$1');
+      } else log('Dark Reader: метка <meta name="darkreader"> не убрана — не найдено место правки');
       libSource = '(function () { var exports = {}; var module = { exports: exports }; var define;\n' + src +
         '\n;globalThis.__kosmoDarkReader = module.exports && module.exports.enable ? module.exports : exports; })();';
       return libSource;
@@ -499,23 +585,82 @@ module.exports = {
       if (n <= 0) { inflight.delete(id); queues.delete(id); } else inflight.set(id, n);
     }
 
-    async function readLimited(res) {
-      const reader = res.body && res.body.getReader ? res.body.getReader() : null;
-      if (!reader) {
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length > FETCH_LIMIT) throw new Error('больше 5 МБ');
-        return buf;
+    // Проверка цели перед КАЖДЫМ запросом (и после каждого редиректа): только http(s), без пароля в адресе,
+    // не локальный хост и ни один из его адресов в DNS не локальный. Резолв — тем же резолвером Chromium,
+    // что и сам запрос (его кэш), чтобы ответ DNS между проверкой и запросом не подменили.
+    async function checkTarget(ses, u, pageLocal) {
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('только http(s)');
+      if (u.username || u.password) throw new Error('адрес с паролем');
+      if (pageLocal) return; // страница сама локальная (разработка) — её локальные стили можно
+      const host = normHost(u.hostname);
+      if (isPrivateHost(host)) throw new Error('локальный адрес');
+      if (isIpLiteral(host)) return;
+      let addrs;
+      try {
+        addrs = typeof ses.resolveHost === 'function'
+          ? ((await ses.resolveHost(host)).endpoints || []).map((e) => e.address)
+          : (await dns.promises.lookup(host, { all: true, verbatim: true })).map((e) => e.address);
+      } catch (_) { throw new Error('адрес не найден'); }
+      if (!addrs.length) throw new Error('адрес не найден');
+      if (addrs.some(isPrivateIp)) throw new Error('локальный адрес');
+    }
+
+    const hval = (v) => String(Array.isArray(v) ? v[0] : v == null ? '' : v);
+
+    // Один запрос без перехода по редиректу: {redirect: url} или {type, isCss, buf}.
+    function requestOnce(ses, href, signal) {
+      return new Promise((resolveP, rejectP) => {
+        let done = false;
+        let req = null;
+        let location = null;
+        const finish = (fn, v) => { if (done) return; done = true; signal.removeEventListener('abort', onAbort); fn(v); };
+        const fail = (err) => { try { if (req) req.abort(); } catch (_) { /* уже закрыт */ } finish(rejectP, err); };
+        function onAbort() { fail(Object.assign(new Error('таймаут 10 с'), { name: 'AbortError' })); }
+        if (signal.aborted) { onAbort(); return; }
+        signal.addEventListener('abort', onAbort);
+        try {
+          req = ctx.electron.net.request({
+            url: href, method: 'GET', session: ses, credentials: 'omit', useSessionCookies: false,
+            redirect: 'manual', bypassCustomProtocolHandlers: true,
+          });
+          req.setHeader('accept', 'text/css,*/*;q=0.1');
+        } catch (e) { finish(rejectP, e); return; }
+        // Редирект не продолжаем: новый адрес проверим и запросим заново (followRedirect нельзя отложить до DNS).
+        req.on('redirect', (_status, _method, url) => { location = url; });
+        req.on('response', (res) => {
+          const status = res.statusCode;
+          if (status < 200 || status >= 300) { fail(new Error('ответ ' + status)); return; }
+          const type = hval(res.headers['content-type']).toLowerCase().split(';')[0].trim();
+          const isCss = type === 'text/css';
+          const isFont = type.startsWith('font/') || FONT_TYPES.has(type);
+          if (!isCss && !isFont) { fail(new Error('не CSS и не шрифт: ' + (type || 'без типа'))); return; }
+          if (Number(hval(res.headers['content-length'])) > FETCH_LIMIT) { fail(new Error('больше 5 МБ')); return; }
+          const chunks = [];
+          let size = 0;
+          res.on('data', (c) => {
+            if (done) return;
+            size += c.length;
+            if (size > FETCH_LIMIT) { fail(new Error('больше 5 МБ')); return; }
+            chunks.push(c);
+          });
+          res.on('end', () => finish(resolveP, { type, isCss, buf: Buffer.concat(chunks) }));
+          res.on('aborted', () => fail(new Error('ответ прерван')));
+          res.on('error', (e) => fail(e));
+        });
+        req.on('error', (e) => { if (location) finish(resolveP, { redirect: location }); else finish(rejectP, e); });
+        req.on('abort', () => finish(rejectP, new Error('запрос прерван')));
+        req.end();
+      });
+    }
+
+    async function fetchChecked(ses, u, signal, pageLocal) {
+      for (let hop = 0; ; hop++) {
+        await checkTarget(ses, u, pageLocal);
+        const res = await requestOnce(ses, u.href, signal);
+        if (!res.redirect) return res;
+        if (hop >= MAX_REDIRECTS) throw new Error('слишком много перенаправлений');
+        try { u = new URL(res.redirect, u); } catch (_) { throw new Error('неверное перенаправление'); }
       }
-      const chunks = [];
-      let size = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > FETCH_LIMIT) { try { await reader.cancel(); } catch (_) {} throw new Error('больше 5 МБ'); }
-        chunks.push(Buffer.from(value));
-      }
-      return Buffer.concat(chunks);
     }
 
     ctx.ipc.handle('kosmo-tab:site-theme.fetch', async (p, meta) => {
@@ -533,33 +678,26 @@ module.exports = {
         const r = resolve(pageUrl);
         if (!r.supported || !r.dark || r.params.engine !== 'dynamic') throw new Error('тема не включена');
         // Локальные адреса — только если и сама страница локальная.
-        if (isPrivateHost(u.hostname) && !isPrivateHost(hostOf(pageUrl))) throw new Error('локальный адрес');
+        const pageLocal = isPrivateHost(hostOf(pageUrl));
+        if (!pageLocal && isPrivateHost(u.hostname)) throw new Error('локальный адрес');
         const hit = cacheGet(u.href);
         if (hit != null) { fetchStats.cached++; return { ok: true, type: 'text/css', text: hit }; }
-        await acquire(wc.id);
+        const wid = wc.id;
+        const ses = wc.session;
+        await acquire(wid);
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT);
         try {
-          const res = await wc.session.fetch(u.href, {
-            method: 'GET', credentials: 'omit', redirect: 'follow', signal: ac.signal, bypassCustomProtocolHandlers: true,
-            headers: { accept: 'text/css,*/*;q=0.1' },
-          });
-          if (!res.ok) throw new Error('ответ ' + res.status);
-          const type = String(res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
-          const isCss = type === 'text/css';
-          const isFont = type.startsWith('font/') || FONT_TYPES.has(type);
-          if (!isCss && !isFont) { try { await res.body?.cancel(); } catch (_) {} throw new Error('не CSS и не шрифт: ' + (type || 'без типа')); }
-          const lenHeader = Number(res.headers.get('content-length'));
-          if (lenHeader > FETCH_LIMIT) throw new Error('больше 5 МБ');
-          const buf = await readLimited(res);
-          fetchStats.ok++; fetchStats.bytes += buf.length;
-          if (!isCss) return { ok: true, type, b64: buf.toString('base64') };
-          const text = buf.toString('utf8');
-          cachePut(u.href, text);
+          const res = await fetchChecked(ses, u, ac.signal, pageLocal);
+          fetchStats.ok++; fetchStats.bytes += res.buf.length;
+          if (!res.isCss) return { ok: true, type: res.type, b64: res.buf.toString('base64') };
+          const text = res.buf.toString('utf8');
+          // в общий кэш — только то, что прошло полную проверку адресов (не «локальная страница → локальный CSS»)
+          if (!pageLocal) cachePut(u.href, text);
           return { ok: true, type: 'text/css', text };
         } finally {
           clearTimeout(timer);
-          release(wc.id);
+          release(wid);
         }
       } catch (e) {
         const error = e && e.name === 'AbortError' ? 'таймаут 10 с' : String((e && e.message) || e).slice(0, 200);
@@ -589,7 +727,7 @@ module.exports = {
     // ---------- команды ----------
     const activeHttp = () => { const t = ctx.tabs.active(); return t && hostOf(t.info.url) ? t : null; };
     ctx.commands.register({
-      id: 'themes.toggleSite', title: 'Тёмная тема на этом сайте', category: 'Оформление', keys: ['Alt+Shift+D'], repeat: false,
+      id: 'themes.toggleSite', title: 'Тёмная тема на этом сайте (вкл./выкл.)', category: 'Оформление', keys: ['Alt+Shift+D'], repeat: false,
       when: () => !!activeHttp(),
       run: () => {
         const t = activeHttp();
@@ -600,7 +738,7 @@ module.exports = {
       },
     });
     ctx.commands.register({
-      id: 'themes.toggleAll', title: 'Тёмная тема для всех сайтов', category: 'Оформление',
+      id: 'themes.toggleAll', title: 'Тёмная тема для всех сайтов (вкл./выкл.)', category: 'Оформление',
       run: () => {
         const mode = S.peek('siteThemes.mode') === 'all' ? 'list' : 'all';
         S.set('siteThemes.mode', mode);

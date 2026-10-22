@@ -2,6 +2,8 @@
 // Настройки: схема и дефолты (ARCHITECTURE §11), миграции, валидация типов, set по пути, рассылка изменений.
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { EventEmitter } = require('events');
 const { clone, isPlainObject } = require('./store');
 
@@ -110,6 +112,38 @@ const ARRAY_VALIDATORS = {
     return out;
   },
   'privacy.adblockAllow': (arr) => arr.map((s) => String(s).trim()).filter(Boolean),
+};
+
+// Строки, которые попадают в запуск программ и открытие путей (SEC-1): проверяем содержимое, а не только тип.
+const CMD_META_RE = /["`&|<>^%;\r\n\t\0]/;
+function statOf(p) { try { return fs.statSync(p); } catch (_) { return null; } }
+// '' (по умолчанию) или абсолютный путь к папке; существующий файл не годится (иначе «открыть папку» запустит его).
+function dirOrEmpty(v, p) {
+  const s = v.trim();
+  if (!s) return '';
+  if (/[\0\r\n<>"|?*]/.test(s.replace(/^[a-z]:/i, ''))) throw new Error(`${p}: недопустимые символы в пути`);
+  if (!path.isAbsolute(s)) throw new Error(`${p}: нужен полный путь к папке`);
+  const st = statOf(s);
+  if (st && !st.isDirectory()) throw new Error(`${p}: это файл, а нужна папка`);
+  return s;
+}
+const STRING_VALIDATORS = {
+  // Имя команды claude (без аргументов) или полный путь к существующему файлу; без спецсимволов оболочки.
+  'claude.claudeCommand': (v, p) => {
+    const s = v.trim();
+    if (!s) return 'claude';
+    if (CMD_META_RE.test(s)) throw new Error(`${p}: недопустимые символы в команде`);
+    if (path.isAbsolute(s)) {
+      const st = statOf(s);
+      if (!st || !st.isFile()) throw new Error(`${p}: файл не найден`);
+      return s;
+    }
+    if (!/^claude[\w.-]{0,60}$/i.test(s)) throw new Error(`${p}: укажите claude или полный путь к Claude Code`);
+    return s;
+  },
+  'claude.inboxDir': dirOrEmpty,
+  'claude.terminalCwd': dirOrEmpty,
+  'downloads.dir': dirOrEmpty,
 };
 
 function splitPath(p) {
@@ -245,6 +279,7 @@ function createSettings(ctx) {
       if (typeof value !== 'string') throw new Error(`${p}: ожидается строка`);
       if (ENUMS[p] && !ENUMS[p].includes(value)) throw new Error(`${p}: допустимо ${ENUMS[p].join('|')}`);
       if (value.length > 200000) throw new Error(`${p}: слишком длинная строка`);
+      if (STRING_VALIDATORS[p]) return STRING_VALIDATORS[p](value, p);
       return value;
     }
     if (Array.isArray(def)) {
@@ -280,9 +315,26 @@ function createSettings(ctx) {
     return coerce(value, def, p);
   }
 
+  // Внутренние страницы, кроме kosmo://settings, получают только безопасные ветки (без токена, команд и разрешений).
+  function pageView() {
+    const out = {};
+    for (const k of PAGE_READ) out[k] = get(k);
+    return out;
+  }
+
   function emitChange(p, value) {
     emitter.emit('change', p, value);
-    if (ctx.broadcast) ctx.broadcast('kosmo:settings.changed', { path: p, value, settings: get() });
+    if (!ctx.broadcast) return;
+    const full = { path: p, value, settings: get() };
+    let forPages; // считаем один раз на рассылку
+    ctx.broadcast('kosmo:settings.changed', full, {
+      forInternal(host) {
+        if (host === 'settings') return full;
+        if (!pageReadable(p)) return null;
+        if (!forPages) forPages = { path: p, value, settings: pageView() };
+        return forPages;
+      },
+    });
   }
 
   function set(path, value) {
@@ -337,7 +389,7 @@ function createSettings(ctx) {
   }
 
   return {
-    get, peek, set, patch, remove, addDefaults,
+    get, peek, set, patch, remove, addDefaults, pageView,
     on(event, cb) { emitter.on(event, cb); return () => emitter.off(event, cb); },
     off(event, cb) { emitter.off(event, cb); },
     schema: { version: VERSION, defaults: DEFAULTS, enums: ENUMS, ranges: RANGES, maps: MAPS },
@@ -345,25 +397,55 @@ function createSettings(ctx) {
   };
 }
 
+// ---------- права внутренних страниц (SEC-1) ----------
+// Интерфейс (ui) и kosmo://settings читают и пишут всё. Остальные внутренние страницы (newtab, history, downloads,
+// extensions) читают только ветки PAGE_READ, а пишут только свои ключи из PAGE_WRITE.
+const PAGE_READ = ['ui', 'search', 'downloads', 'containers'];
+const PAGE_WRITE = {
+  downloads: {
+    'downloads.ask': (v) => typeof v === 'boolean',
+    'downloads.dir': (v) => v === '', // «Сбросить»; выбор папки — через диалог в main
+  },
+};
+
+function pageReadable(p) {
+  const keys = splitPath(p);
+  return !keys.length || PAGE_READ.includes(keys[0]);
+}
+
+function isPrivileged(meta) {
+  return !!meta && (meta.kind === 'ui' || (meta.kind === 'internal' && meta.host === 'settings'));
+}
+
+function deny(what) { throw new Error(`${what}: недоступно с этой страницы`); }
+
 function registerSettingsIpc(ctx) {
   const allow = { allow: ['ui', 'internal'] };
-  ctx.ipc.handle('kosmo:settings.get', (p) => {
-    const path = typeof p === 'string' || Array.isArray(p) ? p : p && p.path;
-    return ctx.settings.get(path);
+  const strict = { allow: ['ui', 'internal:settings'] };
+  const pathOf = (p) => (typeof p === 'string' || Array.isArray(p) ? p : p && p.path);
+  ctx.ipc.handle('kosmo:settings.get', (p, meta) => {
+    const at = pathOf(p);
+    if (isPrivileged(meta)) return ctx.settings.get(at);
+    const keys = splitPath(at);
+    if (!keys.length) return ctx.settings.pageView();
+    if (!PAGE_READ.includes(keys[0])) deny('settings.get ' + joinPath(keys));
+    return ctx.settings.get(keys);
   }, allow);
-  ctx.ipc.handle('kosmo:settings.set', (p) => {
+  ctx.ipc.handle('kosmo:settings.set', (p, meta) => {
     if (!p || p.path == null) throw new Error('нужен {path, value}');
+    if (!isPrivileged(meta)) {
+      const key = joinPath(splitPath(p.path));
+      const rule = (PAGE_WRITE[meta && meta.host] || {})[key];
+      if (!rule || !rule(p.value)) deny('settings.set ' + key);
+    }
     return ctx.settings.set(p.path, p.value);
   }, allow);
   // {patch: {...}} или сам объект изменений
   ctx.ipc.handle('kosmo:settings.patch', (p) => {
     const obj = p && isPlainObject(p.patch) && Object.keys(p).length === 1 ? p.patch : p;
     return ctx.settings.patch(obj || {});
-  }, allow);
-  ctx.ipc.handle('kosmo:settings.remove', (p) => {
-    const path = typeof p === 'string' || Array.isArray(p) ? p : p && p.path;
-    return ctx.settings.remove(path);
-  }, allow);
+  }, strict);
+  ctx.ipc.handle('kosmo:settings.remove', (p) => ctx.settings.remove(pathOf(p)), strict);
 }
 
 module.exports = { createSettings, registerSettingsIpc, DEFAULTS, DEFAULT_BANGS, splitPath, getAt };

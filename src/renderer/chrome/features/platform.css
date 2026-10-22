@@ -29,14 +29,6 @@
 #slot-omnibox-right .kp-shield .k-ic { color: var(--k-text-dim); }
 #slot-omnibox-right .kp-shield:hover .k-ic { color: var(--k-text); }
 #slot-omnibox-right .kp-shield.off .k-ic { color: var(--k-text-faint); }
-#slot-omnibox-right .kp-shield .k-badge-dot {
-  top: auto; bottom: 0; right: -3px;
-  min-width: 13px; height: 12px; padding: 0 3px;
-  border-radius: 6px; line-height: 12px; font-size: 8px; font-weight: 700;
-  background: var(--k-surface-active); color: var(--k-text);
-  box-shadow: 0 0 0 2px var(--omni-bg, var(--k-bg));
-}
-#omnibox:hover #slot-omnibox-right .kp-shield .k-badge-dot { box-shadow: 0 0 0 2px var(--omni-hover, var(--k-surface)); }
 
 /* ---------- чип контейнера ---------- */
 .kp-container {

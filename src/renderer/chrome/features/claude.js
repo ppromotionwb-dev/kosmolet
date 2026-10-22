@@ -36,9 +36,12 @@
     const left = last ? LIVE_MS - (Date.now() - last) : 0;
     const live = mode !== 'off' && mode !== 'error' && left > 0;
     btn.el.classList.toggle('live', live);
+    // сервер готов, но Claude Code ещё ни разу не обращался — точка серая (зелёная/синяя — после первого запроса)
+    const idle = (mode === 'full' || mode === 'read') && !last && !(st && st.requests > 0);
+    btn.el.classList.toggle('idle', idle);
     clearTimeout(liveTimer);
     if (live) liveTimer = setTimeout(render, left + 50);
-    let title = 'Claude — ' + MODE_TEXT[mode];
+    let title = 'Claude — ' + MODE_TEXT[mode] + (idle ? ', Claude Code ещё не подключался' : '');
     if (mode === 'error' && st) title += ': ' + st.error;
     if (last && mode !== 'off') title += '\nПоследнее действие: ' + U.timeAgo(last);
     btn.setTitle(title);

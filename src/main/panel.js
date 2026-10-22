@@ -66,8 +66,10 @@ function createPanel(ctx) {
   }
 
   function send(channel, payload) {
-    if (!view || view.webContents.isDestroyed()) return;
-    view.webContents.send(channel, payload);
+    // При выходе view может остаться без webContents (идёт разборка окна) — молча пропускаем.
+    const wc = view && view.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    wc.send(channel, payload);
   }
 
   function currentWidth() { return liveWidth != null ? liveWidth : Number(ctx.settings.peek('ui.panelWidth')) || 460; }
@@ -97,7 +99,8 @@ function createPanel(ctx) {
   function close() {
     if (!open) return state();
     // Фокус был в панели — после закрытия вернуть его странице.
-    const hadFocus = !!((view && view.webContents.isFocused()) || (devtoolsView && devtoolsView.webContents.isFocused()));
+    const isFocused = (v) => { const w = v && v.webContents; return !!(w && !w.isDestroyed() && w.isFocused()); };
+    const hadFocus = isFocused(view) || isFocused(devtoolsView);
     open = false;
     changed();
     emitter.emit('closed', tool);
@@ -170,7 +173,7 @@ function createPanel(ctx) {
     layout,
     ensure,
     view: () => view,
-    webContents: () => (view ? view.webContents : null),
+    webContents: () => (view && view.webContents && !view.webContents.isDestroyed() ? view.webContents : null),
     get devtoolsView() { return getDevtoolsView(); },
     get devtoolsViewIfCreated() { return devtoolsView; },
     createDevtoolsView,

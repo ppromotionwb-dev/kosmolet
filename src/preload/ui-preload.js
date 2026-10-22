@@ -1,6 +1,7 @@
 'use strict';
 // Preload интерфейса (chrome / panel / overlay): window.kosmo, только каналы kosmo:* (ARCHITECTURE §4).
-// sandbox:false — чтобы фичи могли подключать свои модули (ctx.uiPreload.addModule), например electron-chrome-extensions/preload.
+// chrome: sandbox:false — чтобы фичи могли подключать свои модули (ctx.uiPreload.addModule), например
+// electron-chrome-extensions/preload. Панель и overlay — sandbox:true: модулей им не передаём, require только 'electron'.
 
 const { contextBridge, ipcRenderer } = require('electron');
 

@@ -33,8 +33,9 @@ function createOverlay(ctx) {
   }
 
   function send(channel, payload) {
-    if (!view || view.webContents.isDestroyed()) return;
-    view.webContents.send(channel, payload);
+    const wc = view && view.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    wc.send(channel, payload);
   }
 
   function sendShow() {
@@ -56,7 +57,7 @@ function createOverlay(ctx) {
     if (!size) {
       // Размер ещё неизвестен: полоса высотой 1px на всю ширину (за окном или скрытым видом Chromium не рисует,
       // и размер не придёт). Верхний пиксель карточки — прозрачное поле под тень, поэтому полоса не видна.
-      const top = Math.max(0, Math.round(((state.anchor && state.anchor.y) || 0) + ((state.anchor && state.anchor.h) || 0)));
+      const top = Math.max(0, Math.round(((state.anchor && state.anchor.y) || 0) + (state.above ? -1 : ((state.anchor && state.anchor.h) || 0))));
       view.setBounds({ x: 0, y: Math.min(top, Math.max(0, H - 1)), width: Math.max(1, W), height: 1 });
       return;
     }
@@ -67,7 +68,8 @@ function createOverlay(ctx) {
     if (state.align === 'end') x = a.x + (a.w || 0) - w + inset;
     else if (state.align === 'center') x = a.x + (a.w || 0) / 2 - w / 2;
     else x = a.x - inset;
-    let y = a.y + (a.h || 0) - inset;
+    // above: карточка над якорем (тосты у нижнего края области вкладки), иначе — под ним.
+    let y = state.above ? a.y - Math.round(size.height) + inset : a.y + (a.h || 0) - inset;
     x = Math.round(Math.max(EDGE - inset, Math.min(x, W - w - EDGE + inset)));
     x = Math.max(0, Math.min(x, W - w));
     y = Math.round(Math.max(0, y));
@@ -88,6 +90,7 @@ function createOverlay(ctx) {
       modal: !!opts.modal,
       focus: opts.focus !== undefined ? !!opts.focus : String(opts.type) !== 'omnibox',
       align: ['start', 'end', 'center'].includes(opts.align) ? opts.align : 'start',
+      above: !!opts.above,
       size: null,
       openedAt: Date.now(),
     };
@@ -96,6 +99,7 @@ function createOverlay(ctx) {
     place();
     view.setVisible(true);
     ctx.windows.layout();
+    if (ctx.windows.setTitleBarDim) ctx.windows.setTitleBarDim(state.modal);
     if (state.focus && view.webContents && !view.webContents.isDestroyed()) view.webContents.focus();
     sendShow();
     broadcastState();
@@ -118,13 +122,15 @@ function createOverlay(ctx) {
     if (!state) return false;
     const { type } = state;
     state = null;
+    if (ctx.windows.setTitleBarDim) ctx.windows.setTitleBarDim(false);
     if (view) {
       view.setVisible(false);
       send('kosmo:overlay.hide', { type, reason: reason || 'close' });
     }
     // Если фокус был в overlay — вернуть его странице или интерфейсу.
     const win = ctx.windows.main;
-    if (win && !win.isDestroyed() && view && view.webContents.isFocused()) {
+    const ovWc = view && view.webContents;
+    if (win && !win.isDestroyed() && ovWc && !ovWc.isDestroyed() && ovWc.isFocused()) {
       const tab = ctx.tabs.active();
       if (type === 'omnibox' || !tab || !tab.wc) win.webContents.focus(); else tab.wc.focus();
     }
@@ -133,6 +139,23 @@ function createOverlay(ctx) {
     ctx.broadcast('kosmo:overlay.closed', payload);
     broadcastState();
     emitter.emit('closed', type, payload.reason);
+    return true;
+  }
+
+  // Тост интерфейса (UX-5): chrome-тост лежит под видом вкладки и не виден, поэтому показываем его слоем —
+  // немодально, без фокуса, по центру у нижнего края области вкладки. Если открыт другой поповер — внутри него.
+  function toast(p) {
+    const text = String((p && p.text) || '').trim().slice(0, 300);
+    if (!text) return false;
+    const ms = Math.min(10000, Math.max(1200, Number(p.ms) || 3000));
+    const msg = { text, tone: ['danger', 'ok', 'warn'].includes(p.tone) ? p.tone : null, ms, at: Date.now() };
+    if (state && state.type !== 'toast') { send('kosmo:overlay.toast', msg); return 'inline'; }
+    const g = ctx.windows.geometry();
+    if (!g.W || !g.H) return false;
+    open({
+      type: 'toast', data: msg, focus: false, align: 'center', above: true,
+      anchor: { x: Math.round(g.tab.x + g.tab.width / 2), y: Math.max(g.top + 40, g.H - 16), w: 0, h: 0 },
+    });
     return true;
   }
 
@@ -174,10 +197,11 @@ function createOverlay(ctx) {
     send: update, // send(type, data) — обновить данные открытого поповера
     update,
     resize,
+    toast: (text, opts) => toast(Object.assign({}, opts || {}, { text })),
     ensure,
     warm() { try { ensure(); } catch (e) { ctx.log('overlay', e.message); } },
     view: () => view,
-    webContents: () => (view ? view.webContents : null),
+    webContents: () => (view && view.webContents && !view.webContents.isDestroyed() ? view.webContents : null),
     layout(g) { if (view && state) place(g); },
     post: send, // произвольное сообщение в overlay
     on(ev, cb) { emitter.on(ev, cb); return () => emitter.off(ev, cb); },
@@ -210,6 +234,8 @@ function registerOverlayIpc(ctx) {
   ctx.ipc.on('kosmo:overlay.event', relay);
   ctx.ipc.handle('kosmo:overlay.event', relay);
   ctx.ipc.on('kosmo:overlay.resize', (p) => O.resize(p));
+  ctx.ipc.handle('kosmo:overlay.toast', (p = {}) => O.toast(p.text, p));
+  ctx.ipc.on('kosmo:overlay.toast', (p = {}) => O.toast(p.text, p));
 }
 
 module.exports = { createOverlay, registerOverlayIpc };

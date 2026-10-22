@@ -83,8 +83,8 @@
     }
     if (!modal) { o.ro = new ResizeObserver(scheduleResize); o.ro.observe(card); }
     measure();
-    // фокус: элемент с autofocus или сама карточка (кроме omnibox — фокус остаётся в адресной строке)
-    if (p.type !== 'omnibox') {
+    // фокус: элемент с autofocus или сама карточка (кроме omnibox и тоста — фокус остаётся, где был)
+    if (p.type !== 'omnibox' && p.type !== 'toast') {
       requestAnimationFrame(() => {
         if (cur !== o) return;
         const af = card.querySelector('[autofocus]');
@@ -167,7 +167,7 @@
           it.icon ? U.icon(it.icon) : null,
           h('span.ov-mi-body', h('span.ov-mi-title', it.title), it.sub ? h('span.ov-mi-sub', it.sub) : null),
           it.meta ? h('span.ov-mi-meta', it.meta) : null,
-          it.kbd ? h('span.k-kbd', it.kbd) : null);
+          it.kbd ? (U.kbd ? U.kbd(it.kbd) : h('span.k-kbd', it.kbd)) : null);
         b.addEventListener('click', (e) => { if (it.onClick) it.onClick(e, it); if (opts.onPick) opts.onPick(it, e); });
         b.addEventListener('pointermove', () => setHl(btns.indexOf(b)));
         btns.push(b);
@@ -190,6 +190,26 @@
       return list;
     }
   };
+
+  // Тост интерфейса (KUI.toast из chrome): немодальный, без фокуса, закрывается сам. Клик — закрыть.
+  let toastTimer = 0;
+  function toastRender(el, data, api) {
+    clearTimeout(toastTimer);
+    data = data || {};
+    U.clear(el);
+    el.dataset.tone = data.tone || '';
+    el.appendChild(h('div.ov-toast-text', String(data.text || '')));
+    el.onclick = () => api.close();
+    toastTimer = setTimeout(() => { if (cur && cur.type === 'toast') api.close(); }, Number(data.ms) || 3000);
+  }
+  register('toast', {
+    className: 'ov-toast',
+    render: toastRender,
+    update: (data, api) => toastRender(api.root, data, api),
+    onHide() { clearTimeout(toastTimer); toastTimer = 0; }
+  });
+  // Тост, пока открыт другой поповер (main не заменяет его): обычный KUI.toast внутри слоя.
+  on('kosmo:overlay.toast', (m) => { if (m && m.text) U.toast(m.text, { tone: m.tone || null, ms: m.ms }); });
 
   // тестовый тип для проверки слоя
   register('demo', {

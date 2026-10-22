@@ -25,7 +25,37 @@
     const v = a.url || a.ref || a.selector || a.text || a.keys || a.code || a.id || a.filter || a.direction || '';
     return typeof v === 'string' ? v : JSON.stringify(v);
   }
-  const TOOL_RU = { pick_element: 'элемент', send_to_claude: 'отправка' };
+  // Названия инструментов MCP и частые ошибки — по-русски (оригинал — во всплывающей подсказке).
+  const TOOL_RU = {
+    pick_element: 'Элемент', send_to_claude: 'Отправка', tabs_list: 'Вкладки', page_info: 'Страница', snapshot: 'Снимок',
+    get_html: 'HTML', find: 'Поиск', screenshot: 'Скриншот', network_requests: 'Запросы', network_request: 'Запрос',
+    console_logs: 'Консоль', picked_element: 'Элемент', tab_open: 'Новая вкладка', tab_select: 'Вкладка', tab_close: 'Закрыть вкладку',
+    navigate: 'Переход', click: 'Клик', type: 'Ввод', press_key: 'Клавиши', scroll: 'Прокрутка', hover: 'Наведение',
+    select_option: 'Выбор', wait_for: 'Ожидание', eval_js: 'JavaScript', page_fetch: 'Запрос из страницы',
+    cookies_get: 'Cookies', cookies_set: 'Cookies: запись', storage_get: 'Хранилище',
+  };
+  const ERR_RU = [
+    [/^ref \S+ not found/i, 'Элемент не найден — страница изменилась'],
+    [/access mode is "read"/i, 'Запрещено: у Claude доступ «Только чтение»'],
+    [/access is off/i, 'Доступ Claude выключен'],
+    [/^tab \S+ not found/i, 'Вкладка не найдена'],
+    [/internal page/i, 'Служебная страница — Claude работает только с сайтами'],
+    [/not visible/i, 'Элемент не виден на странице'],
+    [/outside the viewport/i, 'Элемент за пределами экрана'],
+    [/did not respond in time|timeout|timed out/i, 'Страница не ответила вовремя'],
+    [/^JS error/i, 'Ошибка JavaScript на странице'],
+    [/^fetch failed/i, 'Запрос не выполнен'],
+    [/crashed/i, 'Вкладка упала — её нужно перезагрузить'],
+    [/no active tab/i, 'Нет активной вкладки'],
+    [/URL scheme is not allowed/i, 'Такой адрес Claude открывать нельзя'],
+    [/could not focus/i, 'Не удалось поставить курсор в поле'],
+  ];
+  function errRu(msg) {
+    const s = String(msg || '');
+    for (const [re, ru] of ERR_RU) if (re.test(s)) return ru;
+    return s;
+  }
+  const toolRu = (t) => TOOL_RU[t] || t || '—';
 
   KOverlay.register('claude', {
     width: 360,
@@ -145,16 +175,17 @@
         U.clear(list);
         const rows = items.slice(-LIMIT).reverse();
         if (!rows.length) {
-          list.appendChild(h('div.kcl-empty', 'Claude ещё ничего не делал в браузере.'));
+          const never = st && !st.lastCallAt && !(st.requests > 0) && st.access !== 'off';
+          list.appendChild(h('div.kcl-empty', never ? 'Claude Code ещё не подключался — нажмите «Подключить к Claude Code».' : 'Claude ещё ничего не делал в браузере.'));
           return;
         }
         for (const e of rows) {
           const bad = e.ok === false;
-          const row = h('div.kcl-item' + (bad ? '.bad' : ''), { title: bad && e.error ? e.error : '' },
+          const row = h('div.kcl-item' + (bad ? '.bad' : ''), { title: bad && e.error ? errRu(e.error) + '\n\n' + e.error : (e.tool || '') },
             h('span.kcl-time', hms(e.ts)),
-            h('span.kcl-tool.k-mono', TOOL_RU[e.tool] || e.tool),
-            h('span.kcl-arg.k-ellipsis', brief(e)),
-            h('span.kcl-ms', e.tabId != null ? '#' + e.tabId : ''),
+            h('span.kcl-tool', toolRu(e.tool)),
+            h('span.kcl-arg.k-ellipsis', bad && e.error ? errRu(e.error) : brief(e)),
+            h('span.kcl-ms', { title: e.tabId != null ? 'Вкладка #' + e.tabId : '' }, e.tabId != null ? (e.tabTitle || '#' + e.tabId) : ''),
             U.icon(bad ? 'x' : 'check', 13));
           list.appendChild(row);
         }

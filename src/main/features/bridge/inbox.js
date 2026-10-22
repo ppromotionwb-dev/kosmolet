@@ -99,7 +99,7 @@ function createInbox(ctx, deps) {
     if (term && typeof term.pasteToClaude === 'function') {
       try { pasted = !!(await term.pasteToClaude('@' + out.path + ' ')); } catch (_) { pasted = false; }
     }
-    activity.add({ tool: 'send_to_claude', by: 'user', args: { url: md.url }, tabId: tab.id, ok: true, ms: Date.now() - t0, note: out.path });
+    activity.add({ tool: 'send_to_claude', by: 'user', args: { url: md.url }, tabId: tab.id, tabTitle: String(tab.info.title || '').slice(0, 80) || undefined, ok: true, ms: Date.now() - t0, note: out.path });
     return { path: out.path, pasted, url: md.url };
   }
 

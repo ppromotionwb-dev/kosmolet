@@ -144,6 +144,12 @@
   }
 
   const GROUPS = { command: 'Команды', tab: 'Вкладки', bookmark: 'Закладки', history: 'История', bang: 'Бэнги', search: 'Поиск' };
+  // Иконка команды — по её категории (маковский ⌘ на Windows непонятен, а одинаковый значок у каждой строки — шум).
+  const CAT_ICONS = {
+    'Вкладки': 'layers', 'Навигация': 'arrow-right', 'Страница': 'file', 'Вид': 'maximize', 'Браузер': 'settings',
+    'Claude': 'claude', 'Разработка': 'code', 'Оформление': 'palette', 'Приватность': 'shield', 'Закладки': 'star',
+  };
+  const catIcon = (c) => CAT_ICONS[c] || 'chevron-right';
   const ORDER = ['command', 'tab', 'bookmark', 'history', 'bang', 'search'];
 
   O.register('palette', {
@@ -153,7 +159,7 @@
       const input = h('input.ux-pal-input', { type: 'text', spellcheck: 'false', autocomplete: 'off', autofocus: true, placeholder: 'Команда, вкладка, закладка или бэнг', 'aria-label': 'Командная палитра' });
       const list = h('div.ux-pal-list.ov-scroll', { role: 'listbox' });
       st.input = input; st.list = list;
-      root.append(h('div.ux-pal-head', U.icon('command', 16), input, h('span.k-kbd', 'Esc')), list);
+      root.append(h('div.ux-pal-head', U.icon('search', 16), input, h('span.k-kbd', 'Esc')), list);
       input.addEventListener('input', () => { st.q = input.value; st.sel = 0; compute(api); fetchHistory(api); });
       input.addEventListener('keydown', (e) => {
         const n = st.items.length;
@@ -183,7 +189,7 @@
     const add = (kind, score, o) => { if (score >= 0) out.push(Object.assign({ kind, score }, o)); };
     for (const c of d.commands || []) {
       const s = fuzzy(q, c.title + ' ' + (c.category || '') + ' ' + (c.keys || []).join(' '));
-      add('command', s, { id: c.id, title: c.title, sub: c.category, keys: c.keys || [], disabled: c.enabled === false, icon: 'command' });
+      add('command', s, { id: c.id, title: c.title, sub: c.category, keys: c.keys || [], disabled: c.enabled === false, icon: catIcon(c.category) });
     }
     for (const t of d.tabs || []) {
       const s = q ? fuzzy(q, (t.title || '') + ' ' + shown(t.url)) : (t.active ? -1 : 1);
@@ -250,9 +256,10 @@
     for (const g of st.groups) {
       list.appendChild(h('div.ux-pal-group.k-label', GROUPS[g.kind]));
       for (const it of g.items) {
-        const ic = it.favicon ? favicon(it.favicon, it.icon) : h('span.ux-fav', U.icon(it.icon || 'command', 16));
+        const ic = it.favicon ? favicon(it.favicon, it.icon) : h('span.ux-fav', U.icon(it.icon || 'chevron-right', 16));
         let right = null;
-        if (it.kind === 'command' && it.keys && it.keys.length) right = h('span.ux-pal-keys', it.keys.slice(0, 2).map((k) => h('span.k-kbd', k)));
+        // Только первое сочетание: альтернативы (Ctrl+F4 к Ctrl+W) — в «Горячих клавишах».
+        if (it.kind === 'command' && it.keys && it.keys.length) right = h('span.ux-pal-keys', U.kbd ? U.kbd(it.keys[0]) : h('span.k-kbd', it.keys[0]));
         else if (it.kind === 'tab' && it.active) right = h('span.ux-om-pill', 'Текущая');
         const row = h('div.ux-pal-row' + (i === st.sel ? '.sel' : '') + (it.disabled ? '.disabled' : ''), { role: 'option', dataset: { i: String(i) } },
           ic,

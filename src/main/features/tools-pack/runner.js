@@ -201,6 +201,26 @@ function withTimeout(p, ms, label) {
 
 function isWebUrl(url) { return WEB_RE.test(String(url || '')); }
 
+// Выполнение через CDP (ctx.cdp.evalInWorld, подключает tools-pack.js): webContents.executeJavaScript* в Electron
+// ждёт конца загрузки страницы — на «вечно грузящихся» страницах сниппет и рентген висели. Запасной путь — Electron.
+let getCdp = null;
+function useCdp(fn) { getCdp = typeof fn === 'function' ? fn : null; }
+async function exec(tab, code, o) {
+  const cdp = o.cdp !== false && getCdp && getCdp();
+  if (cdp && typeof cdp.evalInWorld === 'function') {
+    try {
+      return await cdp.evalInWorld(tab.id, code, { world: o.world === 'page' ? 'page' : 'kosmolet-snippet', userGesture: !!o.userGesture, timeoutMs: o.timeoutMs, timeoutText: o.timeoutText });
+    } catch (e) {
+      if (!/отладчик|debugger|attach|выгружена|не найдена|нет основного фрейма/i.test(String(e && e.message))) throw e;
+    }
+  }
+  const wc = tab.wc;
+  const p = o.world === 'page'
+    ? wc.executeJavaScript(code, !!o.userGesture)
+    : wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [o.url ? { code, url: o.url } : { code }], !!o.userGesture);
+  return withTimeout(Promise.resolve(p), o.timeoutMs, o.timeoutText);
+}
+
 // Выполнить код во вкладке. → {ok, ms, logs, result?, error?, world, url, expression}
 async function runInTab(tab, code, opts = {}) {
   const world = opts.world === 'page' ? 'page' : 'isolated';
@@ -215,10 +235,10 @@ async function runInTab(tab, code, opts = {}) {
   const t0 = Date.now();
   let r;
   try {
-    const p = world === 'page'
-      ? wc.executeJavaScript(script, opts.userGesture !== false)
-      : wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code: script, url: FILE }], opts.userGesture !== false);
-    r = await withTimeout(Promise.resolve(p), opts.timeoutMs || 60000, opts.timeoutMs ? `нет ответа за ${Math.round(opts.timeoutMs / 1000)} с — код продолжает работать на странице` : 'нет ответа за 60 с — код продолжает работать на странице');
+    r = await exec(tab, script, {
+      world, url: FILE, userGesture: opts.userGesture !== false, timeoutMs: opts.timeoutMs || 60000, cdp: opts.cdp,
+      timeoutText: opts.timeoutMs ? `нет ответа за ${Math.round(opts.timeoutMs / 1000)} с — код продолжает работать на странице` : 'нет ответа за 60 с — код продолжает работать на странице',
+    });
   } catch (e) {
     return { ok: false, world, url, ms: Date.now() - t0, error: { name: 'Ошибка', message: String(e && e.message || e).replace(/^Error: /, '') } };
   }
@@ -233,10 +253,8 @@ async function runInTab(tab, code, opts = {}) {
 async function evalRaw(tab, code, opts = {}) {
   const wc = tab && tab.wc;
   if (!wc || wc.isDestroyed()) throw new Error('вкладка выгружена');
-  const p = opts.world === 'page'
-    ? wc.executeJavaScript(code, false)
-    : wc.executeJavaScriptInIsolatedWorld(WORLD_ID, [{ code }], false);
-  return withTimeout(Promise.resolve(p), opts.timeoutMs || 15000);
+  const ms = opts.timeoutMs || 15000;
+  return exec(tab, code, { world: opts.world === 'page' ? 'page' : 'isolated', userGesture: false, timeoutMs: ms, timeoutText: `нет ответа за ${Math.round(ms / 1000)} с` });
 }
 
-module.exports = { runInTab, evalRaw, prepare, buildScript, mapStack, isWebUrl, WORLD_ID, CODE_LIMIT };
+module.exports = { runInTab, evalRaw, prepare, buildScript, mapStack, isWebUrl, useCdp, WORLD_ID, CODE_LIMIT };

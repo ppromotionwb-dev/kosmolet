@@ -26,10 +26,10 @@ const LIB = [
     },
   },
   {
-    id: 'lib-table-tsv', name: 'Таблица → TSV в буфер', world: 'isolated',
+    id: 'lib-table-tsv', name: 'Таблица в буфер (TSV)', world: 'isolated',
     desc: 'Копирует таблицу для вставки в Excel или Google Таблицы',
     fn: async function () {
-      // Таблица → TSV в буфер обмена: вставляется в Excel и Google Таблицы по ячейкам.
+      // Таблица в буфер обмена (TSV): вставляется в Excel и Google Таблицы по ячейкам.
       // TABLE = 0 — показать все таблицы и выбрать нужную; 1, 2… — сразу скопировать таблицу с этим номером.
       const TABLE = 0;
       const tables = [...document.querySelectorAll('table')].filter((t) => t.rows.length > 0);
@@ -294,7 +294,7 @@ const LIB = [
     },
   },
   {
-    id: 'lib-localstorage', name: 'localStorage → JSON', world: 'isolated',
+    id: 'lib-localstorage', name: 'localStorage в JSON', world: 'isolated',
     desc: 'Всё содержимое localStorage сайта деревом',
     fn: async function () {
       // Содержимое localStorage этого сайта; значения в формате JSON разобраны.
@@ -309,19 +309,19 @@ const LIB = [
     },
   },
   {
-    id: 'lib-cookies', name: 'Куки страницы (document.cookie)', world: 'isolated',
-    desc: 'Куки, видимые странице (без HttpOnly)',
+    id: 'lib-cookies', name: 'Cookies страницы (document.cookie)', world: 'isolated',
+    desc: 'Cookies, видимые странице (без HttpOnly)',
     fn: async function () {
-      // Куки, доступные странице через document.cookie. HttpOnly-куки сюда не попадают — они в панели «Хранилище».
+      // Cookies, доступные странице через document.cookie. HttpOnly-cookies сюда не попадают — они в панели «Хранилище».
       const raw = document.cookie;
-      if (!raw) return 'document.cookie пуст. HttpOnly-куки смотрите в панели «Хранилище».';
+      if (!raw) return 'document.cookie пуст. HttpOnly-cookies смотрите в панели «Хранилище».';
       const rows = raw.split(/;\s*/).map((p) => {
         const i = p.indexOf('=');
         let value = i < 0 ? '' : p.slice(i + 1);
         try { value = decodeURIComponent(value); } catch (e) { /* как есть */ }
         return [i < 0 ? p : p.slice(0, i), value];
       });
-      return { __kosmo: 'table', title: 'Кук: ' + rows.length + ' (без HttpOnly)', columns: ['Имя', 'Значение'], rows };
+      return { __kosmo: 'table', title: 'Cookies: ' + rows.length + ' (без HttpOnly)', columns: ['Имя', 'Значение'], rows };
     },
   },
 ];

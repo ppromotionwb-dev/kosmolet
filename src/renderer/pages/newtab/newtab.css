@@ -4,7 +4,9 @@ body { display: flex; justify-content: center; }
 .nt { width: 100%; max-width: 760px; padding: 18vh 24px 48px; display: flex; flex-direction: column; gap: 36px; }
 
 .nt-hero { display: flex; flex-direction: column; align-items: center; gap: 22px; }
-.nt-logo { color: var(--k-accent-text); opacity: 0.9; }
+.nt-logo { color: var(--k-text); opacity: 0.92; line-height: 0; }
+.nt-logo .nt-ring { stroke: var(--k-accent); }
+.nt-logo .nt-ship { fill: currentColor; }
 
 .nt-search {
   position: relative; width: 100%; max-width: 620px;

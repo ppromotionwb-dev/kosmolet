@@ -174,10 +174,21 @@ function createActions(ctx) {
 
   // ---------- ввод ----------
   function zoomOf(tab) { try { return tab.wc.getZoomFactor() || 1; } catch (_) { return 1; } }
+  // CSS px страницы → DIP вида вкладки (то, что ждёт sendInputEvent и что приходит в context-menu): обычно zoom
+  // вкладки; при эмуляции устройства (devtools) — с её масштабом вписывания (ctx.devtools.emu.viewFactor).
+  function viewScale(tab) {
+    const z = zoomOf(tab);
+    try {
+      const e = ctx.devtools && ctx.devtools.emu;
+      const f = e && typeof e.viewFactor === 'function' ? Number(e.viewFactor(tab.id, z)) : 0;
+      if (f > 0) return f;
+    } catch (_) { /* нет эмуляции */ }
+    return z;
+  }
 
   function mouse(tab, x, y, o = {}) {
     const wc = tab.wc;
-    const z = zoomOf(tab);
+    const z = viewScale(tab);
     const X = Math.round(x * z), Y = Math.round(y * z);
     const button = o.button || 'left';
     const modifiers = o.modifiers || [];
@@ -201,7 +212,7 @@ function createActions(ctx) {
   }
 
   function wheel(tab, x, y, dx, dy) {
-    const z = zoomOf(tab);
+    const z = viewScale(tab);
     tab.wc.sendInputEvent({ type: 'mouseWheel', x: Math.round(x * z), y: Math.round(y * z), deltaX: -dx, deltaY: -dy, canScroll: true });
   }
 
@@ -398,15 +409,15 @@ function createActions(ctx) {
   async function pageFetch(tabId, o) {
     const tab = await liveTab(tabId);
     assertWebPage(tab);
-    // ctx.cdp.pageFetch выполняется через executeJavaScriptInIsolatedWorld, а он ждёт конца загрузки страницы —
-    // пока страница грузится, делаем fetch сами в своём мире (через CDP).
-    if (ctx.cdp && typeof ctx.cdp.pageFetch === 'function' && !tab.wc.isLoadingMainFrame()) return ctx.cdp.pageFetch(tab.id, o);
+    // ctx.cdp.pageFetch выполняет fetch через CDP (без ожидания конца загрузки); старая сборка без evalInWorld
+    // ждала did-stop-loading — тогда, пока страница грузится, делаем fetch сами в своём мире.
+    if (ctx.cdp && typeof ctx.cdp.pageFetch === 'function' && (typeof ctx.cdp.evalInWorld === 'function' || !tab.wc.isLoadingMainFrame())) return ctx.cdp.pageFetch(tab.id, o);
     return pageFetchFallback(tab, o);
   }
 
   return {
     getTab, liveTab, assertWebPage, lib, evalWorld, mouse, key, wheel, parseCombo, watchNav, waitLoad, waitEvent, capture, pageFetch,
-    zoomOf, sleep, withTimeout,
+    zoomOf, viewScale, sleep, withTimeout,
   };
 }
 

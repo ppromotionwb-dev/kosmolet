@@ -7,10 +7,14 @@
   if (!window.KChrome) return;
 
   // ---------- значок эмуляции ----------
+  // планшета нет в общем наборе (в панели его добавляет devtools-common) — бейдж вкладки и значок рисуются здесь
+  if (window.KIcons && !window.KIcons.has('tablet')) window.KIcons.add('tablet', '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M12 18h.01"/>');
+  // Активное состояние — акцентным цветом, как у луны темы и звезды закладки (подложка «нажата» выглядела как наведение).
   const icon = KChrome.addOmniboxIcon({
-    id: 'devtools-emulation', icon: 'smartphone', title: 'Эмуляция устройства', order: 300, hidden: true, pressed: true,
+    id: 'devtools-emulation', icon: 'smartphone', title: 'Эмуляция устройства', order: 300, hidden: true,
     onClick: () => KChrome.invoke('kosmo:panel.open', { tool: 'emulation' }).catch(() => {})
   });
+  icon.el.classList.add('kdt-emu', 'on');
   function syncIcon() {
     const a = KChrome.state.active;
     const b = a && a.badges && a.badges.emulation;

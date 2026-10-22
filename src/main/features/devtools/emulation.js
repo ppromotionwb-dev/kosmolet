@@ -115,7 +115,13 @@ function createEmulation(ctx) {
     const s = stateOf(tabId);
     const sum = summary(s);
     const d = s && deviceOf(s);
-    ctx.tabs.setBadge(tabId, 'emulation', sum ? { icon: d && d.group === 'tablet' ? 'tablet' : d && d.group === 'desktop' ? 'monitor' : s.net === 'offline' ? 'wifi-off' : 'smartphone', tone: 'accent', title: 'Эмуляция: ' + sum } : null);
+    // значок — по тому, что эмулируется: устройство (телефон/планшет/монитор), иначе сеть, процессор или медиа
+    let icon = 'sliders';
+    if (d) icon = d.group === 'tablet' ? 'tablet' : d.group === 'desktop' ? 'monitor' : 'smartphone';
+    else if (s && s.net === 'offline') icon = 'wifi-off';
+    else if (s && (s.net !== 'none' || s.noCache)) icon = 'gauge';
+    else if (s && s.cpu > 1) icon = 'cpu';
+    ctx.tabs.setBadge(tabId, 'emulation', sum ? { icon, tone: 'accent', title: 'Эмуляция: ' + sum } : null);
   }
 
   async function send(tabId, method, params) {
@@ -184,7 +190,7 @@ function createEmulation(ctx) {
     if (s.scheme || s.print || prev.media) {
       await send(tabId, 'Emulation.setEmulatedMedia', { media: s.print ? 'print' : '', features: [{ name: 'prefers-color-scheme', value: s.scheme || '' }] }).catch(() => {});
     }
-    applied.set(tabId, { device: !!d, ua, net: needNet, noCache: s.noCache, cpu: s.cpu || 1, media: !!(s.scheme || s.print), scale: f ? f.scale : null });
+    applied.set(tabId, { device: !!d, mobile: !!(d && d.mobile), ua, net: needNet, noCache: s.noCache, cpu: s.cpu || 1, media: !!(s.scheme || s.print), scale: f ? f.scale : null });
     badge(tabId);
     if (tabId === ctx.tabs.activeId) ctx.windows.layout();
     const url = tab.wc.getURL();
@@ -267,10 +273,47 @@ function createEmulation(ctx) {
     applied.delete(Number(tabId));
     apply(tabId, { reloadOnUa: false }).catch(() => {});
   });
+  // Новый вид вкладки (после выгрузки или сбоя). При выключенной записи сети отладчик сам не подключится и
+  // эмуляция тихо пропала бы — подключаем (дальше её применит обработчик 'attached'). User-Agent отправляем
+  // сразу, синхронно: core вызывает loadURL сразу после события, и первый запрос должен уйти уже с ним.
+  ctx.tabs.on('view-created', (tab, wc) => {
+    const s = stateOf(tab.id);
+    if (!isActive(s)) return;
+    applied.delete(tab.id);
+    ctx.cdp.requireNetwork(tab.id, s.net !== 'none' || s.noCache);
+    ctx.cdp.ensure(tab.id).catch((e) => ctx.log('emulation', `вкладка ${tab.id}: подключение для эмуляции:`, e.message));
+    const d = deviceOf(s);
+    try {
+      if (d && d.ua && wc.debugger.isAttached()) {
+        const p = { userAgent: d.ua };
+        if (d.platform) p.platform = d.platform;
+        if (d.meta) p.userAgentMetadata = d.meta;
+        wc.debugger.sendCommand('Emulation.setUserAgentOverride', p).catch(() => {});
+      }
+    } catch (_) { /* отладчик недоступен — UA применится вместе с остальным */ }
+  });
   ctx.tabs.on('view-destroyed', (tab) => { applied.delete(tab.id); });
   ctx.tabs.on('closed', (tab) => { states.delete(tab.id); applied.delete(tab.id); });
 
-  return { DEVICES, NETWORKS, get, set, reset, apply, isActive: (id) => isActive(stateOf(id)), summary: (id) => summary(stateOf(id)) };
+  // Масштаб, с которым эмулируемое устройство нарисовано в виде вкладки (Emulation.setDeviceMetricsOverride scale).
+  // При эмуляции устройства масштаб страницы (zoom) Chromium не применяет (innerWidth = ширина устройства при
+  // любом zoom), поэтому координаты вида (DIP: sendInputEvent, context-menu) = CSS px × этот масштаб.
+  // Без эмуляции устройства — null (тогда действует обычный zoom вкладки).
+  function inputScale(tabId) {
+    const a = applied.get(Number(tabId));
+    return a && a.device && a.scale > 0 ? a.scale : null;
+  }
+  // DIP вида вкладки на 1 CSS px страницы (без учёта pinch-zoom страницы). Без эмуляции — zoom вкладки.
+  // Мобильная эмуляция: Chromium сам сбрасывает zoom страницы в 1 (как DevTools в режиме устройства) — только
+  // масштаб вписывания. Настольная (Ноутбук, Full HD): zoom действует, × масштаб вписывания (проверено вживую).
+  function viewFactor(tabId, zoom) {
+    const z = Number(zoom) > 0 ? Number(zoom) : 1;
+    const a = applied.get(Number(tabId));
+    if (!a || !a.device || !(a.scale > 0)) return z;
+    return a.mobile ? a.scale : a.scale * z;
+  }
+
+  return { DEVICES, NETWORKS, get, set, reset, apply, inputScale, viewFactor, isActive: (id) => isActive(stateOf(id)), summary: (id) => summary(stateOf(id)) };
 }
 
 module.exports = { createEmulation, DEVICES, NETWORKS };

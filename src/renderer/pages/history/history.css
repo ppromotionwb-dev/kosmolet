@@ -26,7 +26,6 @@
 .hs-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text) !important; }
 .hs-title:hover { text-decoration: underline; }
 .hs-host { flex: 0 10000 auto; min-width: 60px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
-.hs-count { flex-shrink: 0; }
 .hs-del { visibility: hidden; }
 .hs-row:hover .hs-del, .hs-del:focus-visible { visibility: visible; }
 .hs-row.removing { opacity: 0; transition: opacity var(--k-dur) var(--k-ease); }

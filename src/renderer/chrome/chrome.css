@@ -164,8 +164,8 @@ body { user-select: none; cursor: default; }
 .tab-audio { color: var(--k-text-dim); }
 .tab-audio.muted { color: var(--k-text-faint); }
 .tab.pinned .tab-audio, #tabs.tiny .tab .tab-audio { display: none; }
-.tab-close { visibility: hidden; }
-.tab:hover .tab-close, .tab.active .tab-close { visibility: visible; }
+/* у неактивной вкладки без наведения крестик не занимает место — заголовок тянется до правого края */
+.tab:not(.active):not(:hover) .tab-close { display: none; }
 .tab.pinned .tab-close, #tabs.narrow .tab:not(.active) .tab-close { display: none; }
 /* совсем узкая активная: вместо иконки — крестик */
 #tabs.tiny .tab.active:not(.pinned) .tab-icon { display: none; }
@@ -239,8 +239,11 @@ body { user-select: none; cursor: default; }
 #omnibox:not(.focused).has-display #omni-input { color: transparent; }
 #omnibox.focused .omni-display, #omnibox:not(.has-display) .omni-display { display: none; }
 
-#slot-omnibox-right { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
-#slot-omnibox-right .k-icon-btn { width: calc(var(--k-bar-h) - 14px); height: calc(var(--k-bar-h) - 14px); border-radius: var(--k-radius-pill); }
+#slot-omnibox-right { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+/* не меньше 24px и в compact: пять значков подряд по 20px — легко промахнуться */
+#slot-omnibox-right .k-icon-btn { width: max(24px, calc(var(--k-bar-h) - 14px)); height: max(24px, calc(var(--k-bar-h) - 14px)); border-radius: var(--k-radius-pill); }
+/* пока адрес правят — значки страницы скрыты, остаётся только масштаб */
+#omnibox.focused.editing #slot-omnibox-right > :not(.omni-zoom) { display: none; }
 .omni-zoom {
   height: calc(var(--k-bar-h) - 16px); padding: 0 8px; border-radius: var(--k-radius-pill);
   font-size: var(--k-fs-xs); font-weight: 600; color: var(--k-text-dim);

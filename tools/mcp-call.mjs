@@ -2,7 +2,7 @@
 // CLI-клиент MCP моста Космолёта (claude-bridge) для проверок.
 //   node tools/mcp-call.mjs --port N --token T list
 //   node tools/mcp-call.mjs --port N --token T call <tool> '<json>'
-//   node tools/mcp-call.mjs --profile f-bridge call snapshot '{"mode":"interactive"}'   (порт и токен — из .profiles/<p>/settings.json)
+//   node tools/mcp-call.mjs --profile f-bridge call snapshot '{"mode":"interactive"}'   (адрес и токен — из .profiles/<p>/gen/claude-mcp.json, иначе из settings.json)
 // Опции: --out <папка> (куда сохранять картинки, по умолчанию tools/dev-out/mcp), --raw (печатать JSON ответа), --url <полный адрес>.
 // Картинки из ответа сохраняются в файлы, печатается путь. Код выхода 1 — ошибка инструмента или соединения.
 import fs from 'node:fs';
@@ -30,11 +30,25 @@ for (let i = 0; i < argv.length; i++) {
 }
 
 if (opt.profile) {
+  // Сначала gen/claude-mcp.json: там фактический адрес и токен запущенного экземпляра (порт из --mcp-port живёт
+  // только в памяти, в settings.json его нет). settings.json — запасной вариант.
+  const dir = path.join(ROOT, '.profiles', opt.profile);
   try {
-    const s = JSON.parse(fs.readFileSync(path.join(ROOT, '.profiles', opt.profile, 'settings.json'), 'utf8'));
-    if (!opt.token) opt.token = s.claude && s.claude.token;
-    if (!opt.port) opt.port = s.claude && s.claude.mcpPort;
-  } catch (e) { console.error('не прочитаны настройки профиля:', e.message); process.exit(2); }
+    const g = JSON.parse(fs.readFileSync(path.join(dir, 'gen', 'claude-mcp.json'), 'utf8'));
+    const k = g && g.mcpServers && g.mcpServers.kosmolet;
+    if (k) {
+      if (!opt.url && !opt.port && k.url) opt.url = k.url;
+      const auth = k.headers && (k.headers.Authorization || k.headers.authorization);
+      if (!opt.token && auth) opt.token = String(auth).replace(/^Bearer\s+/i, '');
+    }
+  } catch (_) { /* файла ещё нет — берём settings.json */ }
+  if (!opt.token || (!opt.url && !opt.port)) {
+    try {
+      const s = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
+      if (!opt.token) opt.token = s.claude && s.claude.token;
+      if (!opt.port && !opt.url) opt.port = s.claude && s.claude.mcpPort;
+    } catch (e) { if (!opt.token) { console.error('не прочитаны настройки профиля:', e.message); process.exit(2); } }
+  }
 }
 
 const [cmd, ...params] = rest;

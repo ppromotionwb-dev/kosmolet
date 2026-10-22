@@ -60,6 +60,7 @@ function createPicker(ctx, deps) {
       value: p.value == null ? undefined : str(p.value, 500),
       inShadow: !!p.inShadow,
       inFrame: !!p.inFrame,
+      themed: !!p.themed,
     };
   }
 
@@ -87,7 +88,7 @@ function createPicker(ctx, deps) {
     }
     lastPicked = clean(p, tab);
     activity.add({
-      tool: 'pick_element', by: 'user', tabId: tab.id, ok: true, ms: Date.now() - pend.startedAt,
+      tool: 'pick_element', by: 'user', tabId: tab.id, tabTitle: String(tab.info.title || '').slice(0, 80) || undefined, ok: true, ms: Date.now() - pend.startedAt,
       args: { selector: lastPicked.selector, tag: lastPicked.tag }, note: lastPicked.url,
     });
     try { ctx.tabs.markClaude(tab.id); } catch (_) { /* закрыта */ }
@@ -123,10 +124,13 @@ function createPicker(ctx, deps) {
     return { active: true, tabId: tab.id };
   }
 
-  // Элемент в точке (координаты из context-menu — DIP вида; в CSS px делим на масштаб).
+  // Элемент в точке (координаты из context-menu — DIP вида; в CSS px делим на масштаб страницы и эмуляции устройства).
   function at(tab, x, y) {
     tab = webTab(tab && tab.id);
-    const z = tab.wc.getZoomFactor() || 1;
+    // zoom вкладки, а при эмуляции устройства — с её масштабом вписывания (ctx.devtools.emu.viewFactor)
+    const zoom = tab.wc.getZoomFactor() || 1;
+    let z = zoom;
+    try { const e = ctx.devtools && ctx.devtools.emu; const f = e && typeof e.viewFactor === 'function' ? Number(e.viewFactor(tab.id, zoom)) : 0; if (f > 0) z = f; } catch (_) { z = zoom; }
     const id = begin(tab, 'at');
     tab.wc.send('kosmo-tab:picker.at', { id, x: x / z, y: y / z });
     return { tabId: tab.id };

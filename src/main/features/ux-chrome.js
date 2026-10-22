@@ -199,6 +199,13 @@ module.exports = {
     // история (до 10 000 записей) — в простое после старта, чтобы первая подсказка не ждала
     // после загрузки истории у закладок могут появиться значки сайтов
     const u = ctx.uxChrome;
-    if (u) u.history.warm(2500, () => ctx.broadcast('kosmo:bookmarks.changed', { items: u.bookmarks.list() }));
+    if (u) {
+      u.history.warm(2500, () => {
+        ctx.broadcast('kosmo:bookmarks.changed', { items: u.bookmarks.list() });
+        // PERF-16: холостой запрос подсказок в простое — JIT поиска по истории и провайдеров прогрет,
+        // первое нажатие в адресной строке не ждёт лишние сотни мс.
+        setTimeout(() => { Promise.resolve().then(() => u.omni.omni('a', { inline: true })).catch(() => {}); }, 300);
+      });
+    }
   },
 };

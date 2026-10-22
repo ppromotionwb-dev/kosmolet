@@ -122,7 +122,7 @@ function init(ctx) {
 
   // ---------- команды ----------
   ctx.commands.register({
-    id: 'adblock.toggleSite', title: 'Блокировщик: вкл/выкл на этом сайте', category: 'Приватность',
+    id: 'adblock.toggleSite', title: 'Блокировщик рекламы на этом сайте (вкл./выкл.)', category: 'Приватность',
     run: () => {
       const t = ctx.tabs.active();
       if (!t) return;
@@ -133,7 +133,7 @@ function init(ctx) {
     },
   });
   ctx.commands.register({
-    id: 'adblock.toggle', title: 'Блокировщик рекламы: вкл/выкл', category: 'Приватность',
+    id: 'adblock.toggle', title: 'Блокировщик рекламы на всех сайтах (вкл./выкл.)', category: 'Приватность',
     run: () => ctx.settings.set('privacy.adblock', ctx.settings.peek('privacy.adblock') === false),
   });
   ctx.commands.register({
@@ -142,13 +142,17 @@ function init(ctx) {
   });
 
   // ---------- отложенный старт: после показа окна ----------
+  // Расширения и блокировщик — разными задачами: синхронные require библиотек и разбор кэша движка не складываются
+  // в одну паузу main (было 190–390 мс подряд, на холодном диске — секунды).
   let deferred = false;
   const startDeferred = () => {
     if (deferred) return;
     deferred = true;
     setTimeout(() => {
       try { extensions.start(); } catch (e) { ctx.log('platform', 'расширения:', errText(e)); }
-      try { adblock.start(); } catch (e) { ctx.log('platform', 'блокировщик:', errText(e)); }
+      setTimeout(() => {
+        try { adblock.start(); } catch (e) { ctx.log('platform', 'блокировщик:', errText(e)); }
+      }, 150);
     }, 0);
   };
   ctx.tabs.once('loaded', () => setTimeout(startDeferred, DEFER_MS));

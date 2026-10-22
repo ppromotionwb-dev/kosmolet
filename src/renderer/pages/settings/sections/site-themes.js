@@ -49,8 +49,8 @@
 
       // ---------- параметры по умолчанию ----------
       const defGroup = ui.group('Параметры по умолчанию');
-      defGroup.appendChild(ui.segmented('Движок', 'siteThemes.defaults.engine', [['dynamic', 'Динамический'], ['filter', 'Фильтр']],
-        'Динамический (Dark Reader) пересчитывает цвета сайта. Фильтр инвертирует страницу целиком: быстрее, но грубее'));
+      defGroup.appendChild(ui.segmented('Движок', 'siteThemes.defaults.engine', [['dynamic', 'Точный'], ['filter', 'Быстрый']],
+        'Точный (Dark Reader) пересчитывает цвета сайта, но на тяжёлых сайтах замедляет загрузку. Быстрый инвертирует страницу целиком: почти бесплатно, но грубее'));
       for (const s of SLIDERS) defGroup.appendChild(range(s.label, 'siteThemes.defaults.' + s.key, s, api));
 
       // цвета страниц: '' — в тон теме интерфейса

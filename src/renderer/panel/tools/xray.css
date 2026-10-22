@@ -7,6 +7,7 @@
 .tp-xr-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tp-xr-host { font-weight: 600; }
 .tp-xr-url { color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.tp-xr-site { border-bottom: 1px solid var(--k-border); }
 
 .tp-xr-summary { display: flex; align-items: center; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--k-border); flex-shrink: 0; font-size: var(--k-fs-sm); color: var(--k-text-dim); }
 .tp-xr-summary[hidden] { display: none; }

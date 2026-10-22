@@ -64,7 +64,7 @@ KSettings.section({
       if (!tabs.length) tabsBox.appendChild(h('div.tps-none', 'Вкладок нет'));
       const max = Math.max(1, ...tabs.map((t) => t.memKB || 0));
       for (const t of tabs) {
-        const fav = t.favicon ? h('img.tps-fav', { src: t.favicon, alt: '', referrerpolicy: 'no-referrer' }) : h('span.tps-fav', U.icon(/^kosmo:/.test(t.url) ? 'orbit' : 'globe', 14));
+        const fav = t.favicon ? h('img.tps-fav', { src: t.favicon, alt: '', referrerpolicy: 'no-referrer' }) : h('span.tps-fav', U.icon(/^kosmo:/.test(t.url) ? 'kosmolet' : 'globe', 14));
         if (t.favicon) fav.addEventListener('error', () => fav.replaceWith(h('span.tps-fav', U.icon('globe', 14))), { once: true });
         const sub = [hostOf(t.url)];
         if (t.active) sub.push('активная');

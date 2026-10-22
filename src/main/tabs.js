@@ -25,6 +25,10 @@ class Tab {
     this.errorUrl = null; // адрес, который не загрузился (показываем страницу ошибки)
     this.errorPending = false; // ждём загрузки страницы ошибки (чистка истории)
     this.retryFromError = false; // повтор загрузки со страницы ошибки
+    this.uncommitted = null; // адрес, показанный до коммита (navigate/create); не закоммитился — откатываем
+    this.downloadAt = 0; // когда навигация вкладки ушла в загрузку файла
+    this.favKey = null; // «сайт» (схема://хост:порт), к которому относится info.favicon
+    this.favSrc = null; // http-адрес значка, если info.favicon подменён data:URL из сессии
   }
   ensureView() { return this._mgr._ensureView(this); }
   get index() { return this._mgr._indexOf(this); }
@@ -173,7 +177,9 @@ function createTabs(ctx) {
         load(tab, tab.info.url || NEWTAB);
       });
     } else {
-      load(tab, tab.pendingUrl || tab.info.url || NEWTAB);
+      const url = tab.pendingUrl || tab.info.url || NEWTAB;
+      tab.uncommitted = url;
+      load(tab, url);
     }
     tab.pendingUrl = null;
     return view;
@@ -187,13 +193,20 @@ function createTabs(ctx) {
     if (tab.info.muted) wc.setAudioMuted(true);
 
     wc.on('did-start-loading', () => update(tab, { loading: true, crashed: false }));
-    wc.on('did-stop-loading', () => { update(tab, { loading: false }); navState(tab); });
+    wc.on('did-stop-loading', () => {
+      update(tab, { loading: false });
+      navState(tab);
+      if (tab.uncommitted) fixUncommitted(tab);
+    });
     wc.on('did-navigate', (_e, url) => onNavigated(tab, url, false));
     wc.on('did-navigate-in-page', (_e, url, isMainFrame) => { if (isMainFrame) onNavigated(tab, url, true); });
     wc.on('page-title-updated', (_e, title) => { update(tab, { title: String(title || '') }); saveSession(); });
     wc.on('page-favicon-updated', (_e, favicons) => {
       const f = Array.isArray(favicons) && favicons.length ? String(favicons[0]) : '';
+      tab.favSrc = null;
+      tab.favKey = siteKey(wc.getURL());
       update(tab, { favicon: f });
+      if (f) rememberFavicon(tab, f);
     });
     wc.on('did-finish-load', () => { navState(tab); emitter.emit('loaded', tab); });
     wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => onFailLoad(tab, code, desc, url, isMainFrame));
@@ -252,6 +265,92 @@ function createTabs(ctx) {
     ctx.log('tabs', `заблокирован переход на ${target} с ${cur || 'пустой страницы'}`);
   }
 
+  // ---------- значки и незакоммиченные адреса ----------
+
+  // «Сайт» для значка: схема://хост:порт (у kosmo:// WHATWG-origin пустой, поэтому считаем сами).
+  function siteKey(u) {
+    try { const x = new URL(u); return x.protocol + '//' + x.host; } catch (_) { return ''; }
+  }
+
+  const FAV_DATA_MAX = 8 * 1024; // байт: больше — в сессию пишем только адрес
+  const FAV_CACHE_MAX = 300;
+  const favData = new Map(); // http(s)-адрес значка → data:URL | null (не подошёл)
+  const favPending = new Set();
+
+  function isKosmoLogo(url, fav) {
+    return /^kosmo:/i.test(url || '') && typeof fav === 'string' && /^data:image\/svg\+xml;base64,/i.test(fav) && fav.length < 8000;
+  }
+  // Сайт сам поставил значок data:URL (lenta.ru меняет его скриптом) — небольшой растровый пишем в сессию как есть.
+  function isSiteDataIcon(fav) {
+    return typeof fav === 'string' && /^data:image\/(png|gif|jpeg|webp|x-icon|vnd\.microsoft\.icon);base64,/i.test(fav) && fav.length < FAV_DATA_MAX * 2;
+  }
+
+  function cacheFav(url, data) {
+    favData.delete(url);
+    favData.set(url, data);
+    while (favData.size > FAV_CACHE_MAX) favData.delete(favData.keys().next().value);
+  }
+
+  // Скачать значок сессией вкладки (обычно из HTTP-кэша) — для сессии: при старте интерфейс не ходит в сеть за значками.
+  async function fetchFavicon(containerId, url) {
+    const ses = ctx.sessions.get(containerId);
+    if (!ses || typeof ses.fetch !== 'function') return null;
+    const res = await ses.fetch(url, { cache: 'force-cache', signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return null;
+    const type = String(res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (type && !/^image\//.test(type) && type !== 'application/octet-stream') return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) return null;
+    const mime = /^image\//.test(type) ? type : (/\.ico(\?|$)/i.test(url) ? 'image/x-icon' : 'image/png');
+    return { size: buf.length, data: buf.length <= FAV_DATA_MAX ? `data:${mime};base64,${buf.toString('base64')}` : null };
+  }
+
+  function rememberFavicon(tab, url) {
+    if (!/^https?:/i.test(url) || url.length > 2000 || favData.has(url) || favPending.has(url)) return;
+    favPending.add(url);
+    const containerId = tab.info.containerId;
+    // После загрузки страницы: значок к этому времени обычно уже в кэше.
+    setTimeout(() => {
+      fetchFavicon(containerId, url)
+        .then((r) => cacheFav(url, r && r.data ? r.data : null))
+        .catch(() => cacheFav(url, null))
+        .finally(() => favPending.delete(url));
+    }, 1500);
+  }
+
+  // Адрес, показанный до коммита, так и не закоммитился (загрузка файла, «Стоп»): вернуть настоящий.
+  function fixUncommitted(tab) {
+    tab.uncommitted = null;
+    const wc = tab.wc;
+    if (!wc || wc.isDestroyed() || tab.errorUrl || wc.isLoading()) return;
+    const committed = wc.getURL();
+    if (committed) {
+      if (tab.info.url !== committed) { update(tab, { url: committed }); saveSession(); }
+      return;
+    }
+    // Вкладка открыта только ради загрузки (ничего не показала) — закрываем, как Chrome.
+    if (tab.downloadAt && Date.now() - tab.downloadAt < 15000) {
+      tab.downloadAt = 0;
+      setTimeout(() => {
+        if (!byId.has(tab.id) || !tab.wc || tab.wc.isDestroyed() || tab.wc.getURL()) return;
+        if (tabs.length > 1) close(tab.id); else navigate(tab.id, NEWTAB);
+      }, 0);
+    }
+  }
+
+  ctx.sessions.onSession((ses) => {
+    ses.on('will-download', (_e, _item, wc) => {
+      const t = fromWebContents(wc);
+      if (!t) return;
+      t.downloadAt = Date.now();
+      // did-stop-loading мог прийти раньше will-download — проверим ещё раз.
+      setTimeout(() => {
+        if (!byId.has(t.id) || !t.wc || t.wc.isDestroyed() || t.wc.isLoading()) return;
+        if (t.wc.getURL() !== t.info.url || !t.wc.getURL()) fixUncommitted(t);
+      }, 300);
+    });
+  });
+
   function errorParam(url) {
     try { return new URL(url).searchParams.get('url') || ''; } catch (_) { return ''; }
   }
@@ -288,10 +387,15 @@ function createTabs(ctx) {
       }
       tab.errorUrl = null;
     }
-    if (!inPage) tab.retryFromError = false;
+    if (!inPage) { tab.retryFromError = false; tab.uncommitted = null; }
     const patch = { url: shown, crashed: false };
     if (!inPage && !url.startsWith(ERROR_PAGE)) patch.error = 0;
-    if (!inPage) patch.favicon = '';
+    if (!inPage) {
+      // Значок сбрасываем только при смене сайта: на перезагрузке и переходах внутри сайта Chromium
+      // не присылает page-favicon-updated повторно, если список значков не изменился.
+      const key = url.startsWith(ERROR_PAGE) ? 'error:' : siteKey(url);
+      if (key !== tab.favKey) { patch.favicon = ''; tab.favKey = key; tab.favSrc = null; }
+    }
     update(tab, patch);
     navState(tab);
     emitter.emit('navigated', tab, shown);
@@ -301,6 +405,7 @@ function createTabs(ctx) {
   function onFailLoad(tab, code, desc, url, isMainFrame) {
     if (!isMainFrame || code === -3) return; // -3 ERR_ABORTED: остановка/загрузка файла
     if (!url || url.startsWith(ERROR_PAGE)) return;
+    tab.uncommitted = null;
     tab.errorUrl = url;
     tab.errorPending = true;
     // Страница ошибки без kosmo API (её параметры приходят от сайта) — тему передаём в адресе, theme.js её применит.
@@ -482,6 +587,7 @@ function createTabs(ctx) {
     const url = r && r.url ? r.url : normalizeUrl(input);
     tab.errorUrl = null;
     update(tab, { url });
+    tab.uncommitted = url;
     if (!tab.view) {
       tab.history = null;
       tab.pendingUrl = url;
@@ -658,6 +764,34 @@ function createTabs(ctx) {
 
   // ---------- выгрузка неактивных ----------
 
+  // Фичи запрещают выгрузку своих вкладок: addDiscardGuard((tab) => true — не выгружать). Возвращает отписку.
+  const discardGuards = [];
+  function addDiscardGuard(fn) {
+    if (typeof fn !== 'function') throw new Error('addDiscardGuard: нужна функция');
+    discardGuards.push(fn);
+    return () => { const i = discardGuards.indexOf(fn); if (i >= 0) discardGuards.splice(i, 1); };
+  }
+  // Наши DevTools (в панели и в отдельном окне) не видны через isDevToolsOpened() — спрашиваем фичу devtools.
+  // Вкладку с включённой эмуляцией устройства тоже не выгружаем: после выгрузки эмуляция слетела бы.
+  function devtoolsBusy(tab) {
+    try {
+      const dt = ctx.devtools;
+      if (!dt) return false;
+      const d = dt.dock && typeof dt.dock.docks === 'function' ? dt.dock.docks() : null;
+      if (Array.isArray(d) && d.some((x) => x && x.tabId === tab.id)) return true;
+      return !!(dt.emu && typeof dt.emu.isActive === 'function' && dt.emu.isActive(tab.id));
+    } catch (_) { return false; }
+  }
+  function discardBlocked(tab) {
+    const wc = tab.wc;
+    if (wc && !wc.isDestroyed() && wc.isDevToolsOpened()) return true;
+    if (devtoolsBusy(tab)) return true;
+    for (const g of discardGuards) {
+      try { if (g(tab)) return true; } catch (e) { ctx.log('tabs', 'проверка выгрузки:', e.message); }
+    }
+    return false;
+  }
+
   function checkDiscard() {
     const min = Number(ctx.settings.peek('performance.discardAfterMin')) || 0;
     if (!min) return;
@@ -666,7 +800,7 @@ function createTabs(ctx) {
     for (const t of tabs) {
       if (t.id === activeId || !t.view || t.info.pinned || t.info.audible || t.info.loading) continue;
       const wc = t.wc;
-      if (!wc || wc.isDestroyed() || wc.isDevToolsOpened()) continue;
+      if (!wc || wc.isDestroyed() || discardBlocked(t)) continue;
       const last = Math.max(t.lastActiveAt, t.info.claudeActiveAt || 0);
       if (now - last > limit) {
         ctx.log('tabs', `выгружена вкладка ${t.id} (${t.info.url})`);
@@ -682,10 +816,20 @@ function createTabs(ctx) {
   function snapshot() {
     const act = active();
     const out = [];
+    const favMap = {}; // http-адрес значка → data:URL (один раз на адрес)
     for (const t of tabs) {
-      const fav = t.info.favicon && /^https?:/i.test(t.info.favicon) && t.info.favicon.length < 2000 ? t.info.favicon : '';
+      const src = /^https?:/i.test(t.info.favicon || '') ? t.info.favicon : (t.favSrc || '');
+      const fav = src && src.length < 2000 ? src : '';
       const entry = { url: persistUrl(t), title: t.info.title || '', containerId: t.info.containerId, pinned: !!t.info.pinned };
-      if (fav) entry.favicon = fav;
+      if (fav) {
+        entry.favicon = fav;
+        const data = favData.get(fav);
+        if (data) favMap[fav] = data;
+      } else if (isKosmoLogo(t.info.url, t.info.favicon)) {
+        entry.favicon = t.info.favicon; // знак Космолёта у внутренних страниц (svg ~3 КБ) — без него выгруженная вкладка без значка
+      } else if (isSiteDataIcon(t.info.favicon)) {
+        entry.favicon = t.info.favicon;
+      }
       const h = t.wc ? historyOf(t, true) : (t.history ? {
         entries: t.history.entries.slice(-HISTORY_PERSIST_LIMIT).map((e) => ({ url: e.url, title: e.title || '' })),
         index: Math.min(t.history.index, HISTORY_PERSIST_LIMIT - 1),
@@ -693,7 +837,7 @@ function createTabs(ctx) {
       if (h && h.entries && h.entries.length > 1) entry.history = h;
       out.push(entry);
     }
-    return { tabs: out, activeIndex: act ? tabs.indexOf(act) : 0, savedAt: Date.now() };
+    return { tabs: out, activeIndex: act ? tabs.indexOf(act) : 0, savedAt: Date.now(), favicons: favMap };
   }
 
   function saveSession() {
@@ -721,15 +865,28 @@ function createTabs(ctx) {
     const s = sessionStore.get();
     let target = null;
     if (enabled && s && Array.isArray(s.tabs) && s.tabs.length) {
+      const favs = s.favicons && typeof s.favicons === 'object' ? s.favicons : {};
+      for (const [u, d] of Object.entries(favs)) {
+        if (/^https?:/i.test(u) && typeof d === 'string' && /^data:image\/[\w.+-]+;base64,/i.test(d) && d.length < FAV_DATA_MAX * 2) cacheFav(u, d);
+      }
       for (const t of s.tabs) {
         if (!t || typeof t.url !== 'string' || !t.url) continue;
         const history = t.history && Array.isArray(t.history.entries) && t.history.entries.length
           ? { entries: t.history.entries.filter((e) => e && typeof e.url === 'string').map((e) => ({ url: e.url, title: String(e.title || '') })), index: Number(t.history.index) || 0 }
           : null;
-        create({
-          url: t.url, containerId: t.containerId, pinned: !!t.pinned, title: t.title, favicon: t.favicon,
+        const favHttp = typeof t.favicon === 'string' && /^https?:/i.test(t.favicon) ? t.favicon : '';
+        let favShown = favHttp && favData.get(favHttp) ? favData.get(favHttp) : favHttp;
+        if (!favHttp && (isKosmoLogo(t.url, t.favicon) || isSiteDataIcon(t.favicon))) favShown = t.favicon;
+        const tab = create({
+          url: t.url, containerId: t.containerId, pinned: !!t.pinned, title: t.title, favicon: favShown,
           lazy: true, active: false, history,
         });
+        // Значок восстановленной вкладки держится, пока сайт тот же (Chromium может не прислать его заново).
+        if (favShown) {
+          const cur = history && history.entries.length ? history.entries[Math.max(0, Math.min(history.entries.length - 1, history.index))] : null;
+          tab.favKey = siteKey(cur ? cur.url : t.url);
+          if (favHttp && favShown !== favHttp) tab.favSrc = favHttp;
+        }
       }
       if (tabs.length) target = tabs[Math.max(0, Math.min(tabs.length - 1, Number(s.activeIndex) || 0))];
     }
@@ -778,7 +935,7 @@ function createTabs(ctx) {
     list, get, active, fromWebContents, create, close, closeMany, activate, activateOffset, activateIndex,
     navigate, back, forward, reload, stop, move, pin, mute, duplicate, reopenClosed, zoom, find, stopFind,
     discard, setBadge, markClaude, focus: focusTab, restore, realizeActive, openUrls, openOrActivate, flushSession,
-    broadcastState, normalizeUrl, checkDiscard,
+    broadcastState, normalizeUrl, checkDiscard, addDiscardGuard, discardBlocked,
     get activeId() { return activeId; },
     get closedCount() { return closed.length; },
     all: () => tabs.slice(),

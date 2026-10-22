@@ -118,30 +118,41 @@ function init(ctx) {
   };
 
   // ---------- IPC ----------
+  // Каналы моста (токен, режим доступа, запуск claude, папки) — только интерфейсу и kosmo://settings.
+  // Остальные внутренние страницы (newtab, history, downloads, extensions) мостом не пользуются.
   const both = { allow: ['ui', 'internal'] };
-  ctx.ipc.handle('kosmo:bridge.status', () => status(), both);
-  ctx.ipc.handle('kosmo:bridge.activity', (p = {}) => activity.list(p && p.limit), both);
-  ctx.ipc.handle('kosmo:bridge.clearActivity', () => activity.clear(), both);
-  ctx.ipc.handle('kosmo:bridge.setAccess', (p = {}) => {
+  const trusted = (fn) => (p, meta) => {
+    if (meta && meta.kind === 'internal') {
+      let host = '';
+      try { host = new URL(meta.frameUrl).hostname; } catch (_) { host = ''; }
+      if (host !== 'settings') throw new Error('Мост Claude: недоступно с этой страницы');
+    }
+    return fn(p, meta);
+  };
+  const handle = (ch, fn) => ctx.ipc.handle(ch, trusted(fn), both);
+  handle('kosmo:bridge.status', () => status());
+  handle('kosmo:bridge.activity', (p = {}) => activity.list(p && p.limit));
+  handle('kosmo:bridge.clearActivity', () => activity.clear());
+  handle('kosmo:bridge.setAccess', (p = {}) => {
     const a = p && p.access;
     if (!ACCESS.includes(a)) throw new Error('режим доступа: off | read | full');
     S.set('claude.access', a);
     return status();
-  }, both);
-  ctx.ipc.handle('kosmo:bridge.connectClaudeCode', (p = {}) => connect.connectClaudeCode({ dryRun: !!(p && p.dryRun) }), both);
-  ctx.ipc.handle('kosmo:bridge.command', () => ({ command: connect.command(), url: connect.url(), configPath: connect.writeConfig() }), both);
-  ctx.ipc.handle('kosmo:bridge.regenerateToken', () => {
+  });
+  handle('kosmo:bridge.connectClaudeCode', (p = {}) => connect.connectClaudeCode({ dryRun: !!(p && p.dryRun) }));
+  handle('kosmo:bridge.command', () => ({ command: connect.command(), url: connect.url(), configPath: connect.writeConfig() }));
+  handle('kosmo:bridge.regenerateToken', () => {
     S.set('claude.token', crypto.randomBytes(24).toString('hex'));
     return status();
-  }, both);
-  ctx.ipc.handle('kosmo:bridge.tools', () => tools.names(), both);
+  });
+  handle('kosmo:bridge.tools', () => tools.names());
   // Панель Claude → вкладка «Журнал» (панель создаётся лениво — событие чуть позже открытия).
-  ctx.ipc.handle('kosmo:bridge.openLog', () => {
+  handle('kosmo:bridge.openLog', () => {
     ctx.panel.open('claude');
     setTimeout(() => ctx.broadcast('kosmo:bridge.showLog', {}), 250);
     return true;
-  }, both);
-  ctx.ipc.handle('kosmo:bridge.pickDir', async (p = {}) => {
+  });
+  handle('kosmo:bridge.pickDir', async (p = {}) => {
     const kind = p && p.kind === 'terminalCwd' ? 'terminalCwd' : 'inboxDir';
     const cur = kind === 'inboxDir' ? inbox.dir() : (S.peek('claude.terminalCwd') || desktopDir());
     const r = await ctx.electron.dialog.showOpenDialog(ctx.windows.main, {
@@ -152,22 +163,24 @@ function init(ctx) {
     if (r.canceled || !r.filePaths || !r.filePaths[0]) return { path: null };
     S.set('claude.' + kind, r.filePaths[0]);
     return { path: r.filePaths[0] };
-  }, both);
-  ctx.ipc.handle('kosmo:bridge.openDir', async (p = {}) => {
+  });
+  handle('kosmo:bridge.openDir', async (p = {}) => {
     const kind = p && p.kind === 'terminalCwd' ? 'terminalCwd' : 'inboxDir';
     const dir = kind === 'inboxDir' ? inbox.dir() : (S.peek('claude.terminalCwd') || desktopDir());
     await fs.promises.mkdir(dir, { recursive: true }).catch(() => {});
     const err = await ctx.electron.shell.openPath(dir);
     if (err) throw new Error(err);
     return true;
-  }, both);
+  });
   ctx.ipc.handle('kosmo:bridge.sendToClaude', (p = {}) => sendPage(p && p.tabId != null ? p.tabId : undefined));
   ctx.ipc.handle('kosmo:bridge.pick', (p = {}) => picker.start(p && p.tabId != null ? p.tabId : undefined));
   picker.init();
 
   // ---------- команды ----------
   ctx.commands.register({
+    // без 'devtools': там Ctrl+Shift+E — «Evaluate selection in console» самих DevTools
     id: 'claude.pickElement', title: 'Показать Claude элемент', category: 'Claude', keys: ['Ctrl+Shift+E'], repeat: false,
+    scopes: ['chrome', 'tab', 'panel', 'overlay'],
     appMenu: { section: 'tools', order: 60 },
     run: () => pickSafe(),
   });

@@ -13,6 +13,7 @@
 .kcl-btn[data-mode="read"] .kcl-dot { background: var(--k-accent); border-color: var(--k-accent); opacity: 0.75; }
 .kcl-btn[data-mode="full"] .kcl-dot { background: var(--k-ok); border-color: var(--k-ok); opacity: 0.75; }
 .kcl-btn[data-mode="error"] .kcl-dot { background: var(--k-danger); border-color: var(--k-danger); }
+.kcl-btn.idle[data-mode="full"] .kcl-dot, .kcl-btn.idle[data-mode="read"] .kcl-dot { background: var(--k-text-faint); border-color: var(--k-text-faint); opacity: 0.75; }
 .kcl-btn.live .kcl-dot { opacity: 1; }
 .kcl-btn.live[data-mode="full"] .kcl-dot { box-shadow: 0 0 0 1.5px var(--k-bg-elev), 0 0 0 4px var(--k-ok-soft); }
 .kcl-btn.live[data-mode="read"] .kcl-dot { box-shadow: 0 0 0 1.5px var(--k-bg-elev), 0 0 0 4px var(--k-accent-soft); }

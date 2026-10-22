@@ -9,6 +9,21 @@ html, body { height: 100%; overflow: hidden; background: var(--k-bg); }
 }
 :root.resizing, :root.resizing * { cursor: ew-resize !important; user-select: none !important; }
 
+/* шапка «текущий сайт» инструментов (api.siteHeader) */
+.kp-site { display: flex; align-items: center; gap: 10px; padding: 12px 8px 10px 12px; flex-shrink: 0; }
+.kp-site-ic {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: grid; place-items: center; overflow: hidden;
+  border-radius: var(--k-radius-sm);
+  background: var(--k-surface); color: var(--k-accent-text);
+}
+.kp-site-ic img { width: 18px; height: 18px; object-fit: contain; }
+.kp-site-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.kp-site-title { font-weight: 600; }
+.kp-site-sub { color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.kp-site-sub[hidden] { display: none; }
+.kp-site-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+
 #resizer {
   position: absolute; left: -1px; top: 0; bottom: 0; width: 5px; z-index: 10;
   cursor: ew-resize;

@@ -22,6 +22,18 @@ function createContextMenu(ctx) {
 
   const T = () => ctx.tabs;
 
+  // Что можно открыть вкладкой из контента страницы (SEC-5): только веб-адреса. kosmo://, file:, view-source:,
+  // data:text/html и прочее из ссылок сайта не открываем (обход запрета перехода web → kosmo). С внутренних
+  // страниц Космолёта ссылки на kosmo:// можно — как и обычный переход.
+  const WEB_RE = /^https?:/i;
+  const IMG_DATA_RE = /^data:image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon);/i;
+  function canOpenLink(url, wc) {
+    if (WEB_RE.test(url)) return true;
+    if (/^kosmo:/i.test(url)) return !!wc && /^kosmo:/i.test(wc.getURL() || '');
+    return false;
+  }
+  function canOpenMedia(url) { return WEB_RE.test(url) || /^blob:https?:/i.test(url) || IMG_DATA_RE.test(url); }
+
   function openTab(url, tab, opts = {}) {
     return T().create(Object.assign({
       url, openerId: tab ? tab.id : undefined, containerId: tab ? tab.info.containerId : undefined, active: false,
@@ -51,19 +63,21 @@ function createContextMenu(ctx) {
 
     if (!isUi && p.linkURL && !/^javascript:/i.test(p.linkURL)) {
       const link = p.linkURL;
-      sec.link.push(
-        { label: 'Открыть в новой вкладке', click: () => openTab(link, tab) },
-        { label: 'Открыть в новой активной вкладке', click: () => openTab(link, tab, { active: true }) },
-        {
-          label: 'Открыть в контейнере',
-          submenu: ctx.sessions.containers().map((c) => ({
-            label: c.name + (tab && c.id === tab.info.containerId ? ' (текущий)' : ''),
-            click: () => openTab(link, tab, { containerId: c.id, openerId: undefined, active: true }),
-          })),
-        },
-        { type: 'separator' },
-        { label: 'Копировать адрес ссылки', click: () => clipboard.writeText(link) },
-      );
+      if (canOpenLink(link, wc)) {
+        sec.link.push(
+          { label: 'Открыть в новой вкладке', click: () => openTab(link, tab) },
+          { label: 'Открыть в новой активной вкладке', click: () => openTab(link, tab, { active: true }) },
+          {
+            label: 'Открыть в контейнере',
+            submenu: ctx.sessions.containers().map((c) => ({
+              label: c.name + (tab && c.id === tab.info.containerId ? ' (текущий)' : ''),
+              click: () => openTab(link, tab, { containerId: c.id, openerId: undefined, active: true }),
+            })),
+          },
+          { type: 'separator' },
+        );
+      }
+      sec.link.push({ label: 'Копировать адрес ссылки', click: () => clipboard.writeText(link) });
       if (p.linkText && p.linkText.trim() && p.linkText.trim() !== link) {
         sec.link.push({ label: 'Копировать текст ссылки', click: () => clipboard.writeText(p.linkText.trim()) });
       }
@@ -71,16 +85,16 @@ function createContextMenu(ctx) {
 
     if (!isUi && p.mediaType === 'image' && p.srcURL) {
       const src = p.srcURL;
+      if (canOpenMedia(src)) sec.image.push({ label: 'Открыть картинку в новой вкладке', click: () => openTab(src, tab) });
       sec.image.push(
-        { label: 'Открыть картинку в новой вкладке', click: () => openTab(src, tab) },
         { label: 'Копировать картинку', click: () => wc.copyImageAt(p.x, p.y) },
         { label: 'Копировать адрес картинки', click: () => clipboard.writeText(src) },
         { label: 'Сохранить картинку как…', click: () => wc.downloadURL(src) },
       );
     } else if (!isUi && (p.mediaType === 'video' || p.mediaType === 'audio') && p.srcURL && !/^blob:/i.test(p.srcURL)) {
       const src = p.srcURL;
+      if (canOpenMedia(src)) sec.media.push({ label: p.mediaType === 'video' ? 'Открыть видео в новой вкладке' : 'Открыть аудио в новой вкладке', click: () => openTab(src, tab) });
       sec.media.push(
-        { label: p.mediaType === 'video' ? 'Открыть видео в новой вкладке' : 'Открыть аудио в новой вкладке', click: () => openTab(src, tab) },
         { label: 'Копировать адрес', click: () => clipboard.writeText(src) },
         { label: 'Сохранить как…', click: () => wc.downloadURL(src) },
       );
@@ -97,7 +111,7 @@ function createContextMenu(ctx) {
           click: () => openTab(ctx.search.searchUrl(sel), tab, { active: true }),
         });
         const r = ctx.search.resolve(sel);
-        if (r.kind === 'url' && !/\s/.test(sel)) {
+        if (r.kind === 'url' && WEB_RE.test(r.url || '') && !/\s/.test(sel)) {
           sec.selection.push({ label: `Перейти: ${shorten(sel, 40)}`, click: () => openTab(r.url, tab, { active: true }) });
         }
       }
@@ -122,6 +136,9 @@ function createContextMenu(ctx) {
       sec.tools.push({
         label: 'Исследовать элемент',
         click: () => {
+          // Фича devtools сама находит узел до открытия панели (страница потом сужается и координаты устаревают).
+          const dock = ctx.devtools && ctx.devtools.dock;
+          try { if (tab && dock && typeof dock.inspectAt === 'function' && dock.inspectAt(tab.id, p)) return; } catch (e) { ctx.log('context-menu', e.message); }
           // Сначала панель (фича devtools подключит DevTools к вкладке), затем выбор элемента.
           try { ctx.panel.open('devtools'); } catch (e) { ctx.log('context-menu', e.message); }
           setTimeout(() => { if (!wc.isDestroyed()) wc.inspectElement(p.x, p.y); }, 50);

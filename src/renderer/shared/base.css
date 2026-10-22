@@ -75,10 +75,10 @@ a:hover { text-decoration: underline; }
 .k-btn:active { background: var(--k-surface-active); }
 .k-btn:disabled, .k-btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
 .k-btn .k-ic { color: var(--k-text-dim); }
-.k-btn-primary { background: var(--k-accent); border-color: transparent; color: var(--k-on-accent); }
+.k-btn-primary { background: var(--k-accent-fill); border-color: transparent; color: var(--k-on-accent); }
 .k-btn-primary .k-ic { color: inherit; }
-.k-btn-primary:hover { background: var(--k-accent-hover); border-color: transparent; }
-.k-btn-primary:active { background: var(--k-accent); }
+.k-btn-primary:hover { background: color-mix(in oklab, var(--k-accent-fill), white 7%); border-color: transparent; }
+.k-btn-primary:active { background: var(--k-accent-fill); }
 .k-btn-ghost { background: transparent; border-color: transparent; color: var(--k-text-dim); }
 .k-btn-ghost:hover { background: var(--k-surface-hover); border-color: transparent; color: var(--k-text); }
 .k-btn-danger { color: var(--k-danger); }
@@ -104,7 +104,7 @@ a:hover { text-decoration: underline; }
 .k-icon-btn .k-badge-dot {
   position: absolute; right: 3px; top: 3px;
   min-width: 14px; height: 14px; padding: 0 4px;
-  border-radius: 7px; background: var(--k-accent); color: var(--k-on-accent);
+  border-radius: 7px; background: var(--k-accent-fill); color: var(--k-on-accent);
   font-size: 9.5px; font-weight: 700; line-height: 14px; text-align: center;
   box-shadow: 0 0 0 2px var(--k-bg);
   pointer-events: none;
@@ -130,6 +130,12 @@ a:hover { text-decoration: underline; }
 .k-input:hover, .k-select:hover, .k-textarea:hover { border-color: var(--k-border-strong); }
 .k-input:focus, .k-select:focus, .k-textarea:focus { border-color: var(--k-accent); outline: none; background: var(--k-bg-elev); }
 .k-input:disabled, .k-select:disabled { opacity: 0.5; }
+/* светлая схема: поле — белое с рамкой (серая заливка без рамки выглядела отключённой) */
+[data-scheme="light"] .k-input, [data-scheme="light"] .k-select, [data-scheme="light"] .k-textarea {
+  background-color: var(--k-bg-elev); border-color: var(--k-border-strong);
+}
+[data-scheme="light"] .k-input:hover, [data-scheme="light"] .k-select:hover, [data-scheme="light"] .k-textarea:hover { border-color: color-mix(in srgb, var(--k-text) 30%, transparent); }
+[data-scheme="light"] .k-input:focus, [data-scheme="light"] .k-select:focus, [data-scheme="light"] .k-textarea:focus { border-color: var(--k-accent); }
 .k-input.k-mono { font-family: var(--k-mono); }
 .k-input-sm { height: var(--k-ctl-h-sm); font-size: var(--k-fs-sm); padding: 0 8px; border-radius: var(--k-radius-sm); }
 .k-textarea { height: auto; min-height: 72px; padding: 8px 10px; resize: vertical; line-height: 1.45; }
@@ -148,7 +154,7 @@ input[type="number"].k-input { font-variant-numeric: tabular-nums; }
 
 /* поиск с иконкой */
 .k-search { position: relative; display: flex; align-items: center; }
-.k-search .k-ic { position: absolute; left: 9px; color: var(--k-text-faint); }
+.k-search .k-ic { position: absolute; left: 9px; color: var(--k-text-ghost, var(--k-text-faint)); }
 .k-search .k-input { padding-left: 30px; width: 100%; }
 
 /* --- переключатель --- */
@@ -241,7 +247,7 @@ input[type="number"].k-input { font-variant-numeric: tabular-nums; }
   gap: 8px; padding: 32px 20px; text-align: center;
   color: var(--k-text-dim);
 }
-.k-empty > .k-ic { color: var(--k-text-faint); margin-bottom: 4px; }
+.k-empty > .k-ic { color: var(--k-text-ghost, var(--k-text-faint)); margin-bottom: 4px; }
 .k-empty-title { color: var(--k-text); font-weight: 600; }
 .k-empty-text { max-width: 360px; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
 .k-empty-actions { display: flex; gap: 8px; margin-top: 6px; }
@@ -268,6 +274,9 @@ input[type="number"].k-input { font-variant-numeric: tabular-nums; }
   font-family: var(--k-font); font-size: var(--k-fs-xs); font-weight: 600;
   white-space: nowrap;
 }
+/* сочетание клавиш (KUI.kbd): клавиши раздельно, тонкий «+» между ними */
+.k-combo { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+.k-combo-plus { color: var(--k-text-ghost, var(--k-text-faint)); font-size: var(--k-fs-xs); padding: 0 1px; }
 .k-badge {
   display: inline-flex; align-items: center; gap: 4px;
   height: 18px; padding: 0 6px; border-radius: 9px;

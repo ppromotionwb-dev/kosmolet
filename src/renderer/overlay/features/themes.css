@@ -30,7 +30,9 @@
 .kt-val { text-align: right; color: var(--k-text-dim); font-size: var(--k-fs-sm); font-variant-numeric: tabular-nums; }
 .kt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; }
 .kt-seg > button { padding: 0 9px; font-size: var(--k-fs-sm); }
-.kt-mode { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--k-border); }
+.kt-mode { margin-top: 6px; padding: 8px 0 6px; border-top: 1px solid var(--k-border); flex-direction: column; align-items: stretch; gap: 6px; }
+.kt-mode .kt-seg { display: flex; }
+.kt-mode .kt-seg > button { flex: 1 1 auto; justify-content: center; padding: 0 6px; white-space: nowrap; }
 
 .kt-foot {
   display: flex; align-items: center; gap: 6px;

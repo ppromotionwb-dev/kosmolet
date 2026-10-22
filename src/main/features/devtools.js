@@ -14,8 +14,13 @@ const { createEmulation } = require('./devtools/emulation');
 const { createStorage } = require('./devtools/storage');
 const { createNetwork } = require('./devtools/network');
 
-const MAX_DOCKS = 4;
+// Живых встроенных DevTools: активная вкладка + одна предыдущая (быстрое переключение). Каждый фронтенд —
+// ~90–110 МБ, а подключённые DevTools утяжеляют и саму страницу, поэтому после закрытия панели (или смены
+// инструмента) все встроенные DevTools закрываются через IDLE_DOCK_MS.
+const MAX_DOCKS = 2;
+const IDLE_DOCK_MS = 45000;
 const INSPECT_WINDOW_MS = 2500;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function createDevtools(ctx) {
   const docks = new Map(); // tabId → {tabId, wc, view, dwc, external, ready, lastShown, recreated}
@@ -89,6 +94,19 @@ function createDevtools(ctx) {
     return dwc.executeJavaScript(code, false).catch((e) => { ctx.log('devtools', 'настройки фронтенда DevTools:', e.message); return []; });
   }
 
+  // Плашка размера «1360px × 716px» поверх страницы при любом изменении размера вида (полоса поиска, полоса
+  // разрешений, панель) — это Overlay.setShowViewportSizeOnResize фронтенда DevTools. В Космолёте вид вкладки
+  // меняет размер постоянно, поэтому выключаем её для всех целей (и будущих — после переходов).
+  function quietOverlay(dwc) {
+    if (!dwc || dwc.isDestroyed()) return;
+    dwc.executeJavaScript(`(async () => {
+      const SDK = await import('./core/sdk/sdk.js');
+      const off = (m) => { try { m.setShowViewportSizeOnResize(false); } catch (e) {} };
+      SDK.TargetManager.TargetManager.instance().observeModels(SDK.OverlayModel.OverlayModel, { modelAdded: off, modelRemoved: () => {} });
+      return true;
+    })()`, false).catch((e) => ctx.log('devtools', 'плашка размера DevTools:', e.message));
+  }
+
   // ---------- док ----------
 
   function panelShowsDevtools() { return ctx.panel.isOpen() && ctx.panel.tool() === 'devtools'; }
@@ -134,6 +152,7 @@ function createDevtools(ctx) {
     docks.set(tab.id, d);
     dwc.on('did-finish-load', () => {
       if (d.dead) return;
+      quietOverlay(dwc);
       applyFrontend(dwc).then((changed) => {
         if (d.dead) return;
         // язык и плашка языка применяются только при загрузке фронтенда — один раз пересоздаём вид
@@ -155,38 +174,82 @@ function createDevtools(ctx) {
   // «Исследовать элемент» из контекстного меню. Core открывает панель и через 50 мс зовёт inspectElement(x, y),
   // но если панель была закрыта, страница сужается и под (x, y) оказывается другой элемент. Поэтому узел под
   // курсором запоминаем в момент меню (DOM.getNodeForLocation) и после открытия DevTools показываем именно его.
-  function noteMenu(tab, wc, p) {
-    const m = { x: p.x, y: p.y, at: Date.now(), node: null, used: false };
-    lastMenu.set(wc.id, m);
-    if (!ctx.cdp.isAttached(tab.id)) return;
-    const z = wc.getZoomFactor() || 1;
-    ctx.cdp.send(tab.id, 'DOM.getNodeForLocation', { x: Math.round(p.x / z), y: Math.round(p.y / z), includeUserAgentShadowDOM: false, ignorePointerEventsNone: true })
-      .then((r) => { m.node = r && r.backendNodeId ? r.backendNodeId : null; }).catch(() => {});
+  // Координаты context-menu — DIP вида; в CSS px делим на zoom вкладки, а при эмуляции устройства — на её масштаб
+  // вписывания (zoom тогда Chromium не применяет).
+  function viewScale(tab, wc) {
+    const zoom = wc.getZoomFactor() || 1;
+    let f = 0;
+    try { f = ctx.devtools && ctx.devtools.emu ? Number(ctx.devtools.emu.viewFactor(tab.id, zoom)) || 0 : 0; } catch (_) { f = 0; }
+    return f > 0 ? f : zoom;
   }
-  function maybeReveal(d) {
+  function nodeAt(tab, wc, m) {
+    const z = viewScale(tab, wc);
+    return ctx.cdp.send(tab.id, 'DOM.getNodeForLocation', { x: Math.round(m.x / z), y: Math.round(m.y / z), includeUserAgentShadowDOM: false, ignorePointerEventsNone: true })
+      .then((r) => { m.node = r && r.backendNodeId ? r.backendNodeId : null; return m.node; }).catch(() => null);
+  }
+  function noteMenu(tab, wc, p) {
+    const m = { tabId: tab.id, x: p.x, y: p.y, at: Date.now(), node: null, used: false, promise: null };
+    lastMenu.set(wc.id, m);
+    // без отладчика узел найдёт inspectAt (по выбору пункта меню): не подключаемся на каждый правый клик
+    if (ctx.cdp.isAttached(tab.id)) m.promise = nodeAt(tab, wc, m);
+  }
+  // Пункт «Исследовать элемент» (core вызывает вместо inspectElement): узел ищем по координатам клика, ПОКА
+  // страница ещё не сузилась под панель (отладчик подключаем и при выключенной записи сети), затем открываем
+  // DevTools и показываем этот узел. → true: взялись, core не зовёт inspectElement по устаревшим координатам.
+  function inspectAt(tabId, p) {
+    const tab = ctx.tabs.get(tabId);
+    const wc = tab && tab.wc;
+    if (!wc || wc.isDestroyed() || !p || typeof p.x !== 'number' || typeof p.y !== 'number') return false;
+    let m = lastMenu.get(wc.id);
+    if (!m || m.x !== p.x || m.y !== p.y) { m = { tabId: tab.id, x: p.x, y: p.y, at: Date.now(), node: null, used: false, promise: null }; lastMenu.set(wc.id, m); }
+    m.used = false;
+    const found = (m.promise || Promise.resolve(m.node))
+      .then((node) => node || ctx.cdp.ensure(tab.id).then(() => nodeAt(tab, wc, m)))
+      .catch(() => null);
+    m.promise = Promise.race([found, sleep(2000).then(() => m.node)]);
+    m.promise.then((node) => {
+      m.at = Date.now();
+      try { ctx.panel.open('devtools'); } catch (e) { ctx.log('devtools', e.message); }
+      if (node) { sync(); return; }
+      // узел не нашёлся — как раньше: inspectElement по координатам клика
+      m.used = true;
+      setTimeout(() => { if (!wc.isDestroyed()) wc.inspectElement(p.x, p.y); }, 50);
+    });
+    return true;
+  }
+  async function maybeReveal(d) {
     const m = lastMenu.get(d.wc.id);
     if (!m || m.used || Date.now() - m.at > INSPECT_WINDOW_MS) return;
     m.used = true;
-    const run = () => {
-      if (d.dead || !m.node || !d.dwc || d.dwc.isDestroyed()) return;
-      d.dwc.executeJavaScript(`(async () => {
-        const SDK = await import('./core/sdk/sdk.js');
-        const Common = await import('./core/common/common.js');
-        let target = null;
-        for (let i = 0; i < 60 && !target; i++) {
-          target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
-          if (!target) await new Promise((r) => setTimeout(r, 100));
-        }
-        if (!target) return false;
-        const node = await new SDK.DOMModel.DeferredDOMNode(target, ${Number(m.node)}).resolvePromise();
-        if (!node) return false;
-        await Common.Revealer.reveal(node);
-        return true;
-      })()`, false).catch((e) => ctx.log('devtools', 'исследовать элемент:', e.message));
-    };
-    // после inspectElement(x, y) из core (50 мс) — наш точный узел поверх
-    if (d.ready) setTimeout(run, 250);
-    else d.dwc.once('did-finish-load', () => setTimeout(run, 500));
+    const node = m.promise ? await m.promise : m.node;
+    if (!node) return;
+    // фронтенд мог ещё грузиться или быть пересозданным (первый запуск) — ждём готовый док этой вкладки
+    for (let i = 0; i < 100; i++) {
+      const cur = docks.get(m.tabId);
+      if (cur && !cur.dead && !cur.external && cur.ready && cur.dwc && !cur.dwc.isDestroyed()) {
+        await sleep(i ? 500 : 250); // если core всё же вызвал inspectElement(x, y) — наш точный узел поверх
+        reveal(cur, node);
+        return;
+      }
+      await sleep(100);
+    }
+  }
+  function reveal(d, node) {
+    if (d.dead || !d.dwc || d.dwc.isDestroyed()) return;
+    d.dwc.executeJavaScript(`(async () => {
+      const SDK = await import('./core/sdk/sdk.js');
+      const Common = await import('./core/common/common.js');
+      let target = null;
+      for (let i = 0; i < 60 && !target; i++) {
+        target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
+        if (!target) await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!target) return false;
+      const node = await new SDK.DOMModel.DeferredDOMNode(target, ${Number(node)}).resolvePromise();
+      if (!node) return false;
+      await Common.Revealer.reveal(node);
+      return true;
+    })()`, false).catch((e) => ctx.log('devtools', 'исследовать элемент:', e.message));
   }
 
   // Закрыть док и дождаться уничтожения его webContents. Новые DevTools той же вкладки можно открывать только
@@ -224,9 +287,25 @@ function createDevtools(ctx) {
     for (const d of live.slice(0, live.length + 1 - MAX_DOCKS)) destroyDock(d);
   }
 
+  // Панель закрыта или в ней другой инструмент — через IDLE_DOCK_MS закрыть все встроенные DevTools.
+  let reapTimer = null;
+  function scheduleReap() {
+    if (panelShowsDevtools()) { if (reapTimer) { clearTimeout(reapTimer); reapTimer = null; } return; }
+    if (reapTimer || !Array.from(docks.values()).some((d) => !d.external)) return; // уже отсчитываем — не продлеваем
+    reapTimer = setTimeout(() => {
+      reapTimer = null;
+      if (panelShowsDevtools()) return;
+      const idle = Array.from(docks.values()).filter((d) => !d.external);
+      if (idle.length) ctx.log('devtools', `DevTools не показаны ${Math.round(IDLE_DOCK_MS / 1000)} с — закрываю их у вкладок: ${idle.map((d) => d.tabId).join(', ')}`);
+      for (const d of idle) destroyDock(d);
+      pushState();
+    }, IDLE_DOCK_MS);
+  }
+
   // Показать DevTools активной вкладки, если в панели выбран инструмент devtools.
   function sync() {
-    if (!panelShowsDevtools() || recreating) { pushState(); return; }
+    if (!panelShowsDevtools() || recreating) { if (!recreating) scheduleReap(); pushState(); return; }
+    if (reapTimer) { clearTimeout(reapTimer); reapTimer = null; }
     const tab = ctx.tabs.active();
     if (!tab || !tab.wc || tab.wc.isDestroyed()) { setPanelView(null); pushState(); return; }
     let d = docks.get(tab.id);
@@ -319,7 +398,7 @@ function createDevtools(ctx) {
 
   ctx.panel.on('opened', () => sync());
   ctx.panel.on('tool-changed', () => sync());
-  ctx.panel.on('closed', () => pushState());
+  ctx.panel.on('closed', () => { scheduleReap(); pushState(); });
   ctx.tabs.on('activated', () => sync());
   ctx.tabs.on('view-created', (tab, wc) => {
     wc.on('context-menu', (_e, p) => noteMenu(tab, wc, p));
@@ -338,7 +417,7 @@ function createDevtools(ctx) {
   });
 
   return {
-    sync, openWindow, dockBack, pickElement, pushState, seedPrefs,
+    sync, openWindow, dockBack, pickElement, pushState, seedPrefs, inspectAt,
     // для проверок: то же, что делает правый клик по странице
     noteMenu: (tabId, p) => { const t = ctx.tabs.get(tabId); if (t && t.wc) noteMenu(t, t.wc, p); },
     state: pushState,
@@ -377,6 +456,12 @@ module.exports = {
       ctx.app.quit();
       return true;
     }, { allow: ['ui', 'internal'] });
+
+    // В самих DevTools Ctrl+L — «Очистить консоль» (как в Chrome), а не адресная строка браузера.
+    if (typeof ctx.commands.addBypass === 'function') {
+      ctx.commands.addBypass((input, source, _wc, c) => source === 'devtools' && !!c && c.id === 'omnibox.focus'
+        && !!input.control && !input.shift && !input.alt && String(input.key || '').toLowerCase() === 'l');
+    }
 
     // ---------- команды ----------
     const R = (def) => ctx.commands.register(Object.assign({ category: 'Разработка' }, def));

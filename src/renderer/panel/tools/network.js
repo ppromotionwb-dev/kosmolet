@@ -27,9 +27,11 @@
     return U.formatMs(ms);
   }
   function fmtSize(e) {
-    if (e.fromCache && !e.size) return 'кэш';
-    if (e.pending && !e.size) return '…';
-    return e.size ? U.formatBytes(e.size) : '0 Б';
+    const size = Number(e.size) || 0;
+    if (e.fromCache && size <= 0) return 'кэш';
+    if (e.pending && size <= 0) return '…';
+    if (size < 0) return '—'; // размер неизвестен (Chromium присылает −1)
+    return size ? U.formatBytes(size) : '0 Б';
   }
   function splitUrl(url) {
     try {
@@ -319,6 +321,9 @@
         const info = st.info;
         if (!st.tabId || !info) { emptyEl.appendChild(api.empty({ icon: 'activity', title: 'Нет вкладки', text: 'Откройте страницу, чтобы смотреть её запросы.' })); return; }
         if (info.discarded) { emptyEl.appendChild(api.empty({ icon: 'moon', title: 'Вкладка выгружена', text: 'Откройте её — запись продолжится.' })); return; }
+        const live = api.activeTab && api.activeTab();
+        const pageUrl = live && live.id === st.tabId && live.url ? live.url : info.url;
+        if (pageUrl && !/^(https?|file):/i.test(pageUrl)) { emptyEl.appendChild(api.empty({ icon: 'activity', title: 'Служебная страница', text: 'Сеть видна на сайтах (http и https). Откройте сайт в этой вкладке.' })); return; }
         if (info.mode === 'off') {
           const on = h('button.k-btn.k-btn-primary', { type: 'button' }, 'Записывать эту вкладку');
           on.addEventListener('click', () => api.invoke('kosmo:net.capture', { tabId: st.tabId, mode: 'api' }).then(() => watchTab(st.tabId, true)).catch(fail));
@@ -344,7 +349,7 @@
         const reqs = st.all.filter((x) => !x.marker);
         const shown = st.rows.filter((x) => !x.marker);
         let bytes = 0;
-        for (const e of shown) bytes += e.size || 0;
+        for (const e of shown) if (e.size > 0) bytes += e.size;
         U.clear(status);
         const modeTitle = { off: 'выключена', api: 'API', all: 'всё' }[info.mode] || '—';
         const modeBtn = h('button.kn-mode', { type: 'button', title: 'Режим записи сети' }, U.icon('circle-dot', 11), 'Запись: ' + modeTitle);
@@ -504,7 +509,7 @@
         replayBtn.addEventListener('click', () => replay());
         const editBtn = h('button.k-btn.k-btn-sm', { type: 'button', disabled: !dv.entry || e.kind === 'ws', title: 'Изменить и отправить' }, U.icon('pencil', 13), 'Изменить');
         editBtn.addEventListener('click', () => openEditor());
-        const claudeBtn = h('button.k-btn.k-btn-sm', { type: 'button', disabled: !dv.entry, title: 'Сохранить запрос и ответ в markdown для Claude' }, U.icon('claude', 13), 'Claude');
+        const claudeBtn = h('button.k-btn.k-btn-sm', { type: 'button', disabled: !dv.entry, title: 'Отправить в Claude: запрос и ответ в markdown' }, U.icon('claude', 13), 'В Claude');
         claudeBtn.addEventListener('click', () => giveClaude());
         const actions = h('div.kn-dactions', copyBtn, replayBtn, editBtn, claudeBtn);
         detail.append(headEl, actions);
@@ -768,7 +773,7 @@
             { sep: true },
             { title: 'Повторить', icon: 'repeat', disabled: e.kind === 'ws', onPick: () => replay() },
             { title: 'Изменить и отправить', icon: 'pencil', disabled: e.kind === 'ws', onPick: () => openEditor() },
-            { title: 'Отдать Claude', icon: 'claude', onPick: () => giveClaude() },
+            { title: 'Отправить в Claude', icon: 'claude', onPick: () => giveClaude() },
             { sep: true },
             { title: 'Только ' + host, icon: 'filter', disabled: !host, onPick: () => { filterIn.value = 'domain:' + host; applyFilter.flush(); } },
             { title: 'Скрыть ' + host, icon: 'eye-off', disabled: !host, onPick: () => { filterIn.value = (filterIn.value + ' -domain:' + host).trim(); applyFilter.flush(); } }
@@ -800,7 +805,7 @@
       function renderResult(box, req, r, label) {
         U.clear(box);
         const tone = r.error ? 'err' : D.statusTone(r.status, false);
-        const claudeBtn = h('button.k-btn.k-btn-sm', { type: 'button' }, U.icon('claude', 13), 'Claude');
+        const claudeBtn = h('button.k-btn.k-btn-sm', { type: 'button', title: 'Отправить в Claude: запрос и ответ в markdown' }, U.icon('claude', 13), 'В Claude');
         claudeBtn.addEventListener('click', () => giveClaude());
         const editBtn = h('button.k-btn.k-btn-sm', { type: 'button' }, U.icon('pencil', 13), 'Изменить');
         editBtn.addEventListener('click', () => openEditor(req));
@@ -877,7 +882,7 @@
         if (!id) return;
         api.invoke('kosmo:net.toClaude', { tabId: st.tabId, id, replay: dv.mode === 'result' ? dv.replay : null }).then((r) => {
           const name = String(r.path || '').split(/[\\/]/).pop();
-          api.toast(r.pasted ? 'Отдано Claude: ' + name : 'Сохранено для Claude: ' + name, { tone: 'ok', ms: 3500 });
+          api.toast(r.pasted ? 'Отправлено в Claude: ' + name : 'Сохранено для Claude: ' + name, { tone: 'ok', ms: 3500 });
         }).catch(fail);
       }
 
@@ -898,6 +903,7 @@
       api.onTabChange((tab, info) => {
         if (!st.visible) return;
         if (info.reason === 'activated') watchTab(tab ? tab.id : null);
+        else if (tab && tab.id === st.tabId && !emptyEl.hidden) renderEmpty(); // перешли со служебной страницы на сайт и т.п.
       });
       api.on('kosmo:settings.changed', (c) => {
         if (!c || !c.path || !/^devtools(\.|$)/.test(c.path) || !st.visible || st.tabId == null) return;

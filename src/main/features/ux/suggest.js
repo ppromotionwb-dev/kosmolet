@@ -65,7 +65,7 @@ function createOmni(ctx, history, bookmarks) {
       };
     }
     if (r.kind === 'search') return { type: 'search', go: true, url: r.url, fill: q, icon: 'search', title: q, sub: 'Поиск в ' + S.engine().name };
-    if (r.kind === 'internal') return { type: 'url', go: true, url: r.url, fill: q, icon: 'orbit', title: r.url, sub: 'Страница Космолёта' };
+    if (r.kind === 'internal') return { type: 'url', go: true, url: r.url, fill: q, icon: 'kosmolet', title: r.url, sub: 'Страница Космолёта' };
     const h = history.get(r.url);
     return { type: 'url', go: true, url: r.url, fill: q, icon: 'globe', favicon: h && h.favicon, title: /^https?:\/\//i.test(q) ? q : shown(r.url), sub: h && h.title ? h.title : '' };
   }

@@ -62,9 +62,9 @@
       h('span.hs-time', U.formatTime(e.lastVisit)),
       favicon(e),
       h('span.hs-main',
-        h('a.hs-title', { href: e.url, title: title + '\n' + e.url }, highlight(title, st.q)),
+        // число посещений — в подсказке, без плашки «×2» (лишний шум)
+        h('a.hs-title', { href: e.url, title: title + '\n' + e.url + (e.visitCount > 1 ? '\nПосещений: ' + e.visitCount : '') }, highlight(title, st.q)),
         h('span.hs-host', highlight(hostOf(e.url), st.q))),
-      e.visitCount > 1 ? h('span.k-badge.hs-count', { title: 'Посещений: ' + e.visitCount }, '×' + e.visitCount) : null,
       del);
     del.addEventListener('click', () => removeRow(r, e.url));
     return r;

@@ -82,3 +82,19 @@ body { user-select: none; }
 .ov-menu-item .ov-mi-meta { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
 .ov-menu-sep { height: 1px; margin: 4px 6px; background: var(--k-border); }
 .ov-menu-label { padding: 6px 10px 2px; }
+
+/* тост интерфейса (тип toast): как .k-toast, но отдельной карточкой слоя */
+.ov-card.ov-toast {
+  max-width: min(420px, calc(100vw - 16px));
+  min-width: 0;
+  padding: 7px 14px;
+  border-radius: var(--k-radius);
+  font-size: var(--k-fs-sm);
+  cursor: default;
+  white-space: normal;
+}
+.ov-pop .ov-card.ov-toast { width: max-content; }
+.ov-card.ov-toast[data-tone="danger"] { border-color: color-mix(in srgb, var(--k-danger) 50%, transparent); }
+.ov-card.ov-toast[data-tone="ok"] { border-color: color-mix(in srgb, var(--k-ok) 45%, transparent); }
+.ov-card.ov-toast[data-tone="warn"] { border-color: color-mix(in srgb, var(--k-warn) 50%, transparent); }
+.ov-toast-text { overflow-wrap: anywhere; }

@@ -248,6 +248,7 @@
   font-size: 10.5px; font-weight: 600; line-height: 16px;
 }
 .kc-tab, .kc-ms { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kc-tab { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .kc-st { display: grid; place-items: center; color: var(--k-ok); }
 .kc-row.err .kc-st { color: var(--k-danger); }
 .kc-row-err {

@@ -9,7 +9,7 @@
   const $ = (id) => document.getElementById(id);
 
   const navEl = $('ks-nav'), contentEl = $('ks-content'), mainEl = $('ks-main'), qEl = $('ks-q');
-  $('ks-logo').innerHTML = svg('orbit', 20);
+  $('ks-logo').innerHTML = svg('kosmolet', 20);
   $('ks-search-icon').replaceWith(window.KIcons.el('search', 14));
 
   const bus = emitter();

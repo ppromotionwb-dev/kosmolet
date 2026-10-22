@@ -18,7 +18,9 @@ const path = require('path');
 const crypto = require('crypto');
 const runner = require('./tools-pack/runner');
 const library = require('./tools-pack/library');
-const xray = require('./tools-pack/xray');
+// Рентген (44 КБ) нужен только при первом запуске — не грузим его на холодном старте (PERF-12).
+let xrayMod = null;
+const xray = { run: (...a) => (xrayMod || (xrayMod = require('./tools-pack/xray'))).run(...a) };
 
 const AUTO_TIMEOUT = 15000;
 const AUTO_LOG_LIMIT = 30;
@@ -72,6 +74,7 @@ function summarize(r) {
 
 function init(ctx) {
   const store = ctx.store('snippets', { version: 1, items: [] });
+  runner.useCdp(() => ctx.cdp); // сниппеты и рентген — через CDP, без ожидания конца загрузки (см. runner.exec)
 
   // ---------- хранилище ----------
   function clean(s, prev) {
@@ -150,7 +153,8 @@ function init(ctx) {
     broadcastAuto(tab.id);
     for (const s of autos) {
       if (tab.wc !== wc || wc.isDestroyed() || autoLog.get(tab.id) !== rec) return; // ушли со страницы
-      const r = await runner.runInTab(tab, s.code, { world: s.world, timeoutMs: AUTO_TIMEOUT, userGesture: false });
+      // cdp: false — как раньше, после загрузки страницы (Electron ждёт did-stop-loading)
+      const r = await runner.runInTab(tab, s.code, { world: s.world, timeoutMs: AUTO_TIMEOUT, userGesture: false, cdp: false });
       if (autoLog.get(tab.id) !== rec) return;
       rec.entries.push({ id: s.id, name: s.name, at: Date.now(), ok: !!r.ok, ms: r.ms, summary: summarize(r), logs: (r.logs || []).length });
       rec.full.push(Object.assign(r, { tabId: tab.id, id: s.id, name: s.name, at: Date.now(), auto: true }));

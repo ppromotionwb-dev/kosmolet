@@ -296,6 +296,8 @@ function createHub(ctx) {
   function shouldCapture(st, type, url) {
     const mode = tabMode(st);
     if (mode === 'off') return false;
+    // служебные страницы браузера (kosmo://newtab и т.п.) — не трафик сайта
+    if (url && /^kosmo:/i.test(url)) return false;
     if (mode === 'all') return true;
     // data: и blob: (картинки из CSS, иконки) — шум для режима API
     if (url && /^(data|blob):/i.test(url)) return false;
@@ -357,7 +359,7 @@ function createHub(ctx) {
         }
       }
       if (setting('preserveLog', true) === false) clear(st.tabId);
-      addMarker(st, req.url);
+      if (!/^kosmo:/i.test(String(req.url || ''))) addMarker(st, req.url);
       if (setting('preserveLog', true) === false) st.console = [];
     }
     let hop = 0;
@@ -718,6 +720,63 @@ function createHub(ctx) {
     return cmd(st, method, params || {});
   }
 
+  // ---------- выполнение кода во вкладке через CDP ----------
+  // webContents.executeJavaScript(InIsolatedWorld) в Electron сначала ждёт конца загрузки страницы
+  // (did-stop-loading): на тяжёлых и «вечно грузящихся» страницах вызов висит десятки секунд, а потом
+  // все отложенные вызовы выполняются пачкой. Через CDP (Page.createIsolatedWorld + Runtime.evaluate) код
+  // выполняется сразу. Мир — по имени (Chromium переиспользует его в документе), 'page' — главный мир страницы.
+  const worlds = new Map(); // `${tabId}:${name}` → { wc, ctxId }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function withTimeout(p, ms, message) {
+    let t;
+    return Promise.race([
+      p.finally(() => clearTimeout(t)),
+      new Promise((_, rej) => { t = setTimeout(() => rej(new Error(message)), ms); }),
+    ]);
+  }
+  const RETRY_RE = /context|Execution context was destroyed|Inspected target navigated|Cannot find|navigat/i;
+
+  async function evalInWorld(tabId, expression, o = {}) {
+    const world = o.world === 'page' ? 'page' : String(o.world || 'kosmolet-cdp');
+    const timeoutMs = Math.max(500, Math.min(600000, Number(o.timeoutMs) || 30000));
+    const timeoutText = o.timeoutText || `страница не ответила за ${Math.round(timeoutMs / 1000)} с (занята, зависла или показывает диалог)`;
+    await ensure(tabId);
+    const st = stateOf(tabId, false);
+    const key = st.tabId + ':' + world;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const params = { expression, returnByValue: true, awaitPromise: true, userGesture: !!o.userGesture, silent: true };
+      if (world !== 'page') {
+        let w = worlds.get(key);
+        if (!w || w.wc !== st.wc || !w.ctxId) {
+          const tree = await cmd(st, 'Page.getFrameTree', {});
+          const frameId = tree && tree.frameTree && tree.frameTree.frame && tree.frameTree.frame.id;
+          if (!frameId) throw new Error('у страницы нет основного фрейма');
+          const cw = await cmd(st, 'Page.createIsolatedWorld', { frameId, worldName: world, grantUniveralAccess: false });
+          w = { wc: st.wc, ctxId: cw.executionContextId };
+          worlds.set(key, w);
+        }
+        params.contextId = w.ctxId;
+      }
+      let r;
+      try {
+        r = await withTimeout(cmd(st, 'Runtime.evaluate', params), timeoutMs, timeoutText);
+      } catch (e) {
+        if (RETRY_RE.test(String(e && e.message))) { worlds.delete(key); await sleep(120); continue; }
+        throw e;
+      }
+      if (r && r.exceptionDetails) {
+        const ex = r.exceptionDetails;
+        const msg = String((ex.exception && (ex.exception.description || ex.exception.value)) || ex.text || 'исключение');
+        if (/context.*destroyed|navigat/i.test(msg)) { worlds.delete(key); await sleep(120); continue; }
+        throw new Error(msg);
+      }
+      return r && r.result ? r.result.value : undefined;
+    }
+    throw new Error('страница всё время переходит на новый адрес — повторите, когда она откроется');
+  }
+  // Ошибка подключения отладчика (а не выполнения кода) — можно попробовать запасной путь Electron.
+  const isAttachError = (e) => /отладчик|debugger|attach|выгружена|не найдена|нет основного фрейма/i.test(String(e && e.message));
+
   // fetch в контексте страницы: её cookies, origin и CSP; изолированный мир — сайт не видит наш код.
   async function pageFetch(tabId, o = {}) {
     const wc = wcOf(tabId);
@@ -780,8 +839,21 @@ function createHub(ctx) {
       }
     })(${JSON.stringify(opts)})`;
     let r;
-    try { r = await wc.executeJavaScriptInIsolatedWorld(FETCH_WORLD, [{ code }], false); } catch (e) {
-      return { ok: false, status: 0, statusText: '', headers: {}, body: '', truncated: false, timeMs: 0, error: 'страница не выполнила запрос: ' + e.message };
+    try {
+      r = await evalInWorld(tabId, code, { world: 'kosmolet-fetch', timeoutMs: timeoutMs + 5000 });
+    } catch (e) {
+      if (!isAttachError(e) || wc.isDestroyed()) {
+        return { ok: false, status: 0, statusText: '', headers: {}, body: '', truncated: false, timeMs: 0, error: 'страница не выполнила запрос: ' + e.message };
+      }
+      // запасной путь без отладчика: Electron выполнит код только после загрузки страницы
+      if (wc.isLoadingMainFrame()) {
+        return { ok: false, status: 0, statusText: '', headers: {}, body: '', truncated: false, timeMs: 0, error: 'страница ещё загружается — повторите, когда она откроется' };
+      }
+      try {
+        r = await withTimeout(wc.executeJavaScriptInIsolatedWorld(FETCH_WORLD, [{ code }], false), timeoutMs + 5000, 'страница не ответила');
+      } catch (e2) {
+        return { ok: false, status: 0, statusText: '', headers: {}, body: '', truncated: false, timeMs: 0, error: 'страница не выполнила запрос: ' + e2.message };
+      }
     }
     if (!r || typeof r !== 'object') return { ok: false, status: 0, statusText: '', headers: {}, body: '', truncated: false, timeMs: 0, error: 'пустой ответ' };
     return r;
@@ -855,7 +927,9 @@ function createHub(ctx) {
       attach(st).catch((e) => ctx.log('cdp', `вкладка ${tab.id}:`, e.message));
     }
   });
+  const dropWorlds = (tabId) => { for (const k of worlds.keys()) if (k.startsWith(tabId + ':')) worlds.delete(k); };
   ctx.tabs.on('view-destroyed', (tab) => {
+    dropWorlds(tab.id);
     const st = stateOf(tab.id, false);
     if (!st) return;
     detach(st);
@@ -864,6 +938,7 @@ function createHub(ctx) {
     for (const e of st.entries) dropBody(st.tabId, e.id);
   });
   ctx.tabs.on('closed', (tab) => {
+    dropWorlds(tab.id);
     const st = stateOf(tab.id, false);
     if (!st) return;
     st.closed = true;
@@ -885,7 +960,7 @@ function createHub(ctx) {
   });
 
   return {
-    ensure, network, entry, body, console: consoleList, send, pageFetch, clear,
+    ensure, network, entry, body, console: consoleList, send, pageFetch, clear, evalInWorld,
     on(ev, cb) { emitter.on(ev, cb); return () => emitter.off(ev, cb); },
     off(ev, cb) { emitter.off(ev, cb); },
     // дополнительно (панель «Сеть», devtools):

@@ -27,6 +27,7 @@ KSettings.section({
     ];
     const KEY_NAMES = { Left: '←', Right: '→', Up: '↑', Down: '↓', PageUp: 'PgUp', PageDown: 'PgDn', Escape: 'Esc', NumpadAdd: 'Num +', NumpadSubtract: 'Num −', Numpad0: 'Num 0', '-': '−' };
     function comboEl(combo) {
+      if (U.kbd) { const el = U.kbd(combo); el.classList.add('tps-combo'); return el; } // общий вид (KUI.kbd)
       if (/\s|…|клик|кнопка/.test(combo)) return h('span.tps-combo', h('span.k-kbd', combo));
       const parts = combo.split('+');
       if (combo.endsWith('++')) parts.splice(parts.length - 2, 2, '+');

@@ -126,9 +126,11 @@
       lastKey = key;
       btn.setVisible(web);
       if (!web) return;
-      btn.setIcon(off ? 'shield-off' : 'shield');
+      // Без числа на иконке (в 8px оно нечитаемо и закрывало щит): щит с галочкой — что-то заблокировано,
+      // само число — в подсказке и крупно в поповере.
+      btn.setIcon(off ? 'shield-off' : n > 0 ? 'shield-check' : 'shield');
       btn.el.classList.toggle('off', !!off);
-      btn.setBadge(!off && n > 0 ? (n > 99 ? '99+' : String(n)) : null);
+      btn.setBadge(null);
       const site = host.replace(/^www\./, '');
       btn.setTitle(!status.enabled ? 'Блокировщик рекламы выключен'
         : off ? 'Блокировка на ' + site + ' выключена'
@@ -246,7 +248,9 @@
         U.clear(text);
         const host = h('b', it.host || it.origin);
         if (it.external) {
-          text.append(host, ' хочет открыть приложение для ссылок ', h('span.kp-perm-scheme', it.external + ':'));
+          // полный адрес ссылки, а не только схема: видно, что именно получит приложение
+          const full = it.externalUrl || it.external + ':';
+          text.append(host, ' хочет открыть внешнее приложение: ', h('span.kp-perm-scheme', full.length > 90 ? full.slice(0, 90) + '…' : full));
           allowBtn.textContent = 'Открыть';
         } else if (it.sources) {
           text.append(host, ' хочет показать ваш экран');
@@ -260,7 +264,7 @@
         if (it.sources) for (const s of it.sources) select.appendChild(h('option', { value: s.id }, s.name));
         rememberLabel.hidden = it.remember === false;
         rememberBox.checked = remember[it.id] !== undefined ? remember[it.id] : true;
-        el.title = it.origin;
+        el.title = it.external && it.externalUrl ? it.externalUrl : it.origin;
       }
       more.textContent = mine.length > 1 ? 'ещё ' + (mine.length - 1) : '';
       more.hidden = mine.length < 2;

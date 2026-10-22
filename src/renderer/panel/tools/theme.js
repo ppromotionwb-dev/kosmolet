@@ -56,7 +56,7 @@
         sliders.appendChild(h('label.kp-slider', h('span.kp-label', s.label), range, val));
         rows[s.key] = { range, val };
       }
-      const engine = seg([['dynamic', 'Динамический'], ['filter', 'Фильтр']], (v) => send({ engine: v }), 'Движок');
+      const engine = seg([['dynamic', 'Точный'], ['filter', 'Быстрый']], (v) => send({ engine: v }), 'Движок');
       const bgIn = h('input.k-input.kp-color', { type: 'color', 'aria-label': 'Фон страницы' });
       const textIn = h('input.k-input.kp-color', { type: 'color', 'aria-label': 'Текст страницы' });
       const autoBtn = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Цвета в тон теме интерфейса' }, 'Как у интерфейса');
@@ -70,7 +70,7 @@
         sliders,
         h('div.kp-row', h('span.kp-label', 'Движок'), engine),
         h('div.kp-row', h('span.kp-label', 'Цвета'), h('div.kp-colors', h('span.kp-cl', 'фон'), bgIn, h('span.kp-cl', 'текст'), textIn, autoBtn)),
-        h('div.kp-hint', 'Динамический движок пересчитывает цвета сайта (Dark Reader). Фильтр инвертирует всю страницу: быстрее, но грубее.'));
+        h('div.kp-hint', 'Точный (Dark Reader) пересчитывает цвета сайта, но на тяжёлых сайтах замедляет загрузку. Быстрый инвертирует всю страницу: почти бесплатно, но грубее.'));
 
       // ---------- свой CSS ----------
       const ta = h('textarea.k-textarea.kp-css', {
