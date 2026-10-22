@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Упрощённый знак для 16–24 px: однотонный корабль, кольцо плотнее и темнее, просвет шире. -->
+  <defs>
+    <mask id="k-cut-s" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#fff"/>
+      <path d="M238 140A110 42 0 0 1 18 140" transform="rotate(-20 128 140)" fill="none" stroke="#000" stroke-width="50" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="52" fill="#1b2038"/>
+  <path d="M18 140A110 42 0 0 1 238 140" transform="rotate(-20 128 140)" fill="none" stroke="#7666ff" stroke-width="24" stroke-linecap="round"/>
+  <g mask="url(#k-cut-s)">
+    <path d="M0 -108L52 60L0 34Z M0 -108L-52 60L0 34Z" transform="translate(126 118) rotate(28)" fill="#ffffff"/>
+  </g>
+  <path d="M238 140A110 42 0 0 1 18 140" transform="rotate(-20 128 140)" fill="none" stroke="#7666ff" stroke-width="24" stroke-linecap="round"/>
+</svg>

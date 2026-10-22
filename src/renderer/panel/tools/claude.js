@@ -87,7 +87,7 @@
     if (e.tool === 'send_to_claude') return a.url || 'страница';
     const v = a.url || a.ref || a.selector || a.text || a.keys || a.code || a.query || a.id || a.filter || a.direction || '';
     if (v) return typeof v === 'string' ? v : JSON.stringify(v);
-    const keys = Object.keys(a);
+    const keys = Object.keys(a).filter((k) => k !== 'tabId'); // вкладка — в своей колонке
     if (!keys.length) return '';
     return keys.slice(0, 3).map((k) => k + '=' + (typeof a[k] === 'string' ? a[k] : JSON.stringify(a[k]))).join(', ');
   }
@@ -357,7 +357,7 @@
 
     const active = () => st.sessions.get(st.activeId) || null;
 
-    function attach(info, unit) {
+    function attach(info, unit, fresh) {
       const have = st.sessions.get(info.id);
       if (have) { update(have, info); return Promise.resolve(have); }
       if (st.attaching.has(info.id)) return st.attaching.get(info.id);
@@ -378,7 +378,9 @@
         try {
           const r = await U.invoke('kosmo:term.replay', { id: s.id, withSeq: true });
           if (r && typeof r === 'object') {
-            if (r.data) s.term.write(r.data);
+            // В буфере могут быть запросы программ к терминалу (ESC[c, ESC[6n, OSC 11…). xterm ответит на них
+            // повторно — пока буфер разбирается, такие ответы в процесс не отправляем.
+            if (r.data) { if (fresh) s.term.write(r.data); else await writeMuted(s, r.data); }
             s.seq = r.seq || 0;
             if (r.alive === false) { s.alive = false; s.exitCode = r.exitCode; }
           }
@@ -402,8 +404,19 @@
       renderChip(s);
     }
 
+    function writeMuted(s, data) {
+      return new Promise((resolve) => {
+        s.muted = true;
+        let done = false;
+        const fin = () => { if (done) return; done = true; s.muted = false; resolve(); };
+        setTimeout(fin, 3000);
+        s.term.write(data, fin);
+      });
+    }
+
     function wire(s) {
       s.term.onData((d) => {
+        if (s.muted && d.charCodeAt(0) === 0x1b) return; // ответ терминала на запрос из старого вывода
         if (!s.alive) { if (/\r/.test(d)) restartSession(s); return; }
         U.send('kosmo:term.write', { id: s.id, data: d });
       });
@@ -563,7 +576,7 @@
           if (d && isFinite(d.cols) && isFinite(d.rows)) { cols = Math.max(20, d.cols); rows = Math.max(5, d.rows); unit.term.resize(cols, rows); }
         }
         const r = await U.invoke('kosmo:term.create', { profile, cols, rows });
-        const s = await attach(r, unit);
+        const s = await attach(r, unit, true);
         unit = null;
         activate(s.id, { focus: true });
       } catch (e) {

@@ -42,7 +42,8 @@ const MIME = {
   '.wasm': 'application/wasm',
 };
 
-const CSP = "default-src 'self' kosmo:; img-src * data: blob:; style-src 'self' 'unsafe-inline' kosmo:; frame-ancestors 'none'";
+// crx: — иконки действий расширений в <browser-action-list> (crx://extension-icon/…, фича platform).
+const CSP = "default-src 'self' kosmo:; img-src * data: blob: crx:; style-src 'self' 'unsafe-inline' kosmo:; frame-ancestors 'none'";
 
 // Пакеты node_modules, которые интерфейс может грузить как kosmo://ui/vendor/<пакет>/<файл>.
 const VENDOR = new Set(['@xterm/xterm', '@xterm/addon-fit']);

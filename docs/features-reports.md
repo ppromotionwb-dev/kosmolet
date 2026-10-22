@@ -1,4 +1,4 @@
-# Отчёты фич (21.10.2026, первая волна)
+# Отчёты фич (21–22.10.2026)
 
 ## ux-chrome
 
@@ -368,4 +368,228 @@ All paths are under `C:\Users\Пользователь\Desktop\KOSMOLET\`.
   - Для `claude --mcp-config` берите `ctx.bridge.mcpConfigPath()`.
   - `pasteToClaude(text)` вызывается со строкой `@<путь> `.
 - **core.** Пусть главный агент добавит в ARCHITECTURE §13: имена CDP-миров (`kosmolet-snapshot` / `kosmolet-eval` / `kosmolet-fetch`) и каналы `kosmo:bridge.toast`, `kosmo:bridge.picker`, `kosmo:bridge.picked`, `kosmo:bridge.status`, `kosmo:bridge.openLog`.
+
+## claude-terminal
+
+Отчёт claude-terminal (повторный запуск: доделал и проверил вживую)
+
+**Итог.** Терминал с Claude Code в правой панели работает. Все проверки из задания пройдены вживую. Смоук ядра на моём экземпляре (f-term, 47480/47338/9348): «ВСЁ ПРОШЛО», `featureErrors` пустой. Экземпляр завершён через `/quit`. После выхода не осталось ни одного дочернего процесса: ни powershell/cmd/bash, ни conhost, ни OpenConsole.
+
+## Что сделано
+1. **Main (`claude-terminal.js`).** Файл с прошлой попытки сверил с заданием, всё из п. 1 было на месте. Профили, сборка команды Claude, батч 16 мс только в панель, буфер 256 КБ, ресайз, убийство дерева процессов, `before-quit`, IPC и `ctx.terminal.pasteToClaude/open` есть. В этот раз исправил:
+   - **Заглавная кириллица в PowerShell терялась**: «Ошибка» вводилась как «шибка». Пропадали А, О, Ж, Э, Ю, № и т. д. Причина — PSReadLine 2.0.0 в Windows PowerShell 5.1, который ConPTY кормит нажатиями «Shift+клавиша». В cmd и в node (как у Claude Code) символы приходят верно. Обход:
+     - PowerShell и cmd запускаются через `conpty.dll` + `OpenConsole.exe` из node-pty (`useConptyDll`);
+     - в PowerShell каждый символ вне ASCII отправляется событием win32-input-mode без модификаторов;
+     - проверка: 78 из 78 символов (весь алфавит, Ёё, №, «»—€, ÄÖÜß) доходят верно;
+     - если conpty.dll не запустится, используется системный ConPTY.
+   - **Висящий conhost.exe.** Когда оболочка завершается сама (`exit`), системный ConPTY Windows 10 оставлял conhost. С conpty.dll OpenConsole завершается сам — проверено.
+   - **Поток чтения вывода после выхода.** node-pty не освобождает его после естественного выхода, освобождаю сам (`releaseConout`).
+   - **Выход из приложения мог зависнуть**, если сессия жива: так и было, пока проверочные процессы из моих тестов оставались живыми. Обработчик выхода закрывает все псевдоконсоли.
+   - **Git Bash оставлен на системном ConPTY.** Под conpty.dll bash из MSYS2 терял первый символ, набранный после ресайза («ls» превращалось в «s»). На системном ConPTY такого нет — проверено.
+2. **Панель (`claude.js` + `claude.css`).**
+   - Под xterm были чёрные поля шириной 10 px: `xterm.css` красит viewport в `#000`. Исправил.
+   - Синий, пурпурный и голубой ANSI раньше были захардкожены. Теперь они выводятся из `--k-ok` через `oklch(from …)`, то есть только из токенов темы.
+   - **Перезагрузка панели больше не отправляет в процесс мусор.** В буфере лежат запросы к терминалу (например, `ESC[c`), и xterm при восстановлении отвечал на них повторно. Теперь ответы, пока буфер разбирается, не отправляются. Проверено двумя перезагрузками подряд.
+   - В журнале убрал повтор `tabId=…` в аргументах: вкладка и так показана в своей колонке.
+
+## Файлы
+- Мои:
+  - `C:\Users\Пользователь\Desktop\KOSMOLET\src\main\features\claude-terminal.js`
+  - `C:\Users\Пользователь\Desktop\KOSMOLET\src\renderer\panel\tools\claude.js`
+  - `C:\Users\Пользователь\Desktop\KOSMOLET\src\renderer\panel\tools\claude.css`
+- **Правка ядра** (сделана в прошлой попытке, аддитивная, в этот раз не менял): `C:\Users\Пользователь\Desktop\KOSMOLET\src\main\commands.js`. Добавлены `ctx.commands.addBypass(fn)` и экспорт `comboFromInput`. Пока фокус в терминале, Ctrl или Alt + буква без Shift уходят в оболочку, а не браузеру. За браузером остаются F-клавиши, Ctrl+Shift+…, Ctrl+Tab, Ctrl+PgUp/PgDn и Ctrl+1…9.
+- **Каналы сверх задания:**
+  - `kosmo:term.restart`, `kosmo:term.info`, `kosmo:term.clipboard`;
+  - `kosmo:term.focusState` (через send);
+  - события `kosmo:term.sessions`, `kosmo:term.reset`, `kosmo:term.show`;
+  - `kosmo:term.replay {withSeq:true}` → `{data, seq, alive, exitCode}`;
+  - команды `claude.terminal` и `claude.terminalNew`.
+
+## Как проверено (скриншоты в `C:\Users\Пользователь\Desktop\KOSMOLET\tools\dev-out\f-term\`)
+- **Пустое состояние.** Крупная кнопка «Запустить Claude» и строка «Работает в: ~\Desktop · сменить»: `01-empty-dark.png`, `11-empty-light.png`.
+- **PowerShell.** `echo привет; Get-Location` печатает правильно, весь алфавит с заглавными — тоже: `02-powershell-cyrillic-dark.png`. cmd и Git Bash: кириллица верная, `TERM=xterm-256color`, `COLORTERM=truecolor`.
+- **Ресайз.** `$Host.UI.RawUI.WindowSize` при ширине панели 460 → 720: 60x42 → 97x42, в main те же числа.
+- **Цвета.** Тёмная и светлая тема, смена темы на лету: `03-colors-dark.png`, `04-colors-light.png`.
+- **Закрытие сессии крестиком.** PID powershell и его OpenConsole исчезают. Естественный `exit` показывает «Сеанс завершён (код 0). Enter — запустить заново.», процессы при этом исчезают. Перезапуск работает и по Enter, и по кнопке со второго нажатия (PID меняется).
+- **Профиль Claude.** Запускал `claude --mcp-config <ctx.bridge.mcpConfigPath()> --version` во всех трёх оболочках. Везде печатается «2.1.220 (Claude Code)»: `05-claude-version-sessions.png`.
+  - В PowerShell это `& '…\npm\claude.cmd' '--mcp-config' '…'`, в cmd — `/s /k ""…""`, в bash — POSIX-пути.
+  - Сам `claude-mcp.json` проверил запросом к мосту: 26 инструментов.
+  - Интерактивный Claude не запускал, как и было сказано.
+- **`pasteToClaude`.** Проверял на Claude-сессии, которая осталась в PowerShell после `--version`. Текст вставляется без Enter, панель переключается с «Сети» на Claude, фокус уходит в xterm: `06-paste-to-claude.png`. Если Claude-сессии нет (в том числе когда открыт только PowerShell), возвращается `false`.
+- **«Отправить в Claude» от моста** (`ctx.bridge.sendPage` на example.com). Вернулось `pasted: true`, в ввод вставлено `@<путь> `. Inbox был в тестовой папке профиля, системный буфер подменён заглушкой. Папку и настройку потом убрал.
+- **Журнал.** Вызовы через `tools/mcp-call.mjs` появляются сразу. Ошибка показана красным крестиком, у запроса пользователя есть плашка «вы». Строка статуса показывает режим и адрес, в режиме off — «Мост выключен». Точка на вкладке «Журнал» загорается. Скриншоты: `07-log-dark.png`, `12-log-light.png`, `13-log-bridge-off-light.png`.
+- **Меню «+»:** `08-plus-menu.png`. Общий вид окна: `10-window-terminal-dark.png`.
+- **Буфер обмена** (системный буфер подменён заглушкой). Ctrl+V вставляет «Вставка ОК» с верной кириллицей. Выделение двойным кликом + Ctrl+Shift+C копирует. ПКМ без выделения вставляет.
+- **Горячие клавиши.** Ctrl+L очищает экран, а адресная строка фокус не получает. Ctrl+T не открывает вкладку: `before-input-event` видел `tab.new`, но клавиша ушла в оболочку.
+- **«Рабочая папка».** Проверял с подменённым `dialog.showOpenDialog`. Путь сохраняется в `claude.terminalCwd`, новая сессия открывается в выбранной папке, появляется тост.
+- **Выход приложения** при живых сессиях PowerShell, cmd, Git Bash и Claude: всё дерево процессов завершилось.
+
+## Ограничения
+- Пока фокус в терминале, Ctrl+T, Ctrl+W, Ctrl+L, Ctrl+R, Ctrl+F, Ctrl+K отдаются оболочке и Claude Code. Это осознанное решение: у Claude Code на них свои действия (Ctrl+T, Ctrl+R).
+- Сессия Git Bash идёт через системный ConPTY. Если bash завершится сам, его conhost.exe живёт до выхода из Космолёта. При закрытии крестиком и при выходе всё убирается.
+- `useConptyDll` в node-pty 1.1 помечен как EXPERIMENTAL, на случай ошибки есть откат на системный ConPTY. Освобождение потока вывода опирается на внутреннее поле node-pty (`_agent._conoutSocketWorker`): версия зафиксирована в lock-файле. Если когда-нибудь собирать установщик, `conpty.dll` и `OpenConsole.exe` нужно распаковать из asar.
+- Не-ASCII ввод через события win32-input-mode проверен на node в raw-режиме, сам `claude.exe` в интерактиве не проверялся. Пустое состояние «Мост Claude недоступен» вживую не проверено: мост всегда есть. Настоящие диалог выбора папки и системный буфер не трогал.
+
+## Что нужно от соседей
+- **devtools / core.** При выходе из приложения в логе было необработанное исключение: `TypeError: Cannot read properties of undefined (reading 'isDestroyed')` в `panel.js:69` (`send`), вызов идёт из `devtools.js:112` (`pushState`) по событию вкладки при закрытии. Нужна защита от `view.webContents === undefined`.
+- **Главному агенту.** Стоит внести в ARCHITECTURE: `ctx.commands.addBypass`, каналы `kosmo:term.*` из списка выше, вкладку «Журнал» по событию `kosmo:bridge.showLog`.
+
+## platform
+
+# Отчёт platform: расширения, блокировщик, контейнеры, разрешения сайтов, вход по HTTP, раздел «Приватность»
+
+Все шесть пунктов сделаны и проверены на живом экземпляре f-platform (порты 47490/47339/9349). Смоук ядра `node tools/smoke.mjs 47490 9349` прошёл дважды, второй раз после последних правок: «ВСЁ ПРОШЛО». `featureErrors` пустой, ошибок в консолях интерфейса нет. Тестовые расширения удалены, экземпляр закрыт через `/quit`, тестовый сервер остановлен, коммитов нет. С прошлой попытки на диске ничего не было, все файлы написаны с нуля.
+
+Главное отклонение от задания. Блокировщик не включается через `ElectronBlocker.enableBlockingInSession`, у него своя обёртка, а решения о блокировке по-прежнему принимает движок ghostery. Причины три:
+- библиотека вешает глобальный `ipcMain.handle` на каждую сессию, и на втором контейнере это падает с ошибкой «second handler»;
+- выключение блокировщика в одной сессии снимает обработчики у всех контейнеров;
+- белого списка у неё нет. У меня решение о блокировке принимается по адресу страницы во вкладке и меняется без пересборки движка. Сайты из `privacy.adblockAllow` не фильтруются вообще: ни запросы, ни CSP, ни скрытие элементов.
+
+## Что сделано
+1. **Расширения.**
+   - **Подключение.** На каждый контейнер свой `ElectronChromeExtensions` и `installChromeWebStore`, папка `userData/extensions` общая. Вкладки привязаны через `addTab`, `selectTab`, `removeTab`; выгрузка вкладки за закрытие не считается. Своя загрузка расширений сразу после этого не срабатывает, отклик библиотеки отсекается.
+   - **Когда загружается.** Библиотеки грузятся после первой загруженной вкладки (+1,2 с) или через 3,5 с после ready и занимают 80–130 мс.
+   - **Общая установка.** Расширение, установленное в одном контейнере, само загружается в остальные. Обновлённая версия тоже доходит до всех, старая поверх новой не ставится. Проверка обновлений идёт раз в 6 часов на все контейнеры сразу.
+   - **Кнопки на панели.** `<browser-action-list>` стоит в панели с order 250, левее загрузок, и меняется вместе с контейнером активной вкладки. Стили в цветах темы. Кнопки скрыты, если у расширений нет действий.
+   - **Попап.** Открывается под кнопкой, повторный клик его закрывает. Ещё он закрывается при смене вкладки, сдвиге и изменении размера окна.
+   - **Страница `kosmo://extensions`.** Иконка, имя, версия, id (копируется кликом), «Настройки», «Перезагрузить», «Удалить» с подтверждением в строке, «Загрузить распакованное…», «Chrome Web Store», пустое состояние. Пункт «Расширения» в меню «⋯» ведёт сюда, проверил.
+   - **Установка из магазина** спрашивает подтверждение в модальном окне со списком разрешений по-русски. Повторный клик «Установить» второго окна не открывает.
+   - **Контекстное меню.** Пункты `chrome.contextMenus` попадают в меню страницы.
+   - **Вкладки страниц расширений**, восстановленные до загрузки расширений, перезагружаются сами.
+2. **Блокировщик.**
+   - **Движок** собирается в `worker_thread`, потому что разбор списков занимает около 3,7 с процессора, и кэшируется в `adblock-engine.bin`. Из кэша поднимается за 300–550 мс, это тоже после показа окна. Если файлу больше 7 дней, обновление идёт в фоне при старте и при проверке раз в 6 часов. Проверено: подменил дату файла, и через 3,7 с списки обновились. Если поток сборки не поднимется, запасной путь — `fromPrebuiltAdsAndTracking(fetch, {path, read, write})` прямо в main.
+   - **Щит в адресной строке** показывает число заблокированного на странице. Поповер: переключатель на сайт (меняет белый список и перезагружает вкладку), «на странице» и «за сеанс», общий выключатель, ссылка на настройки.
+   - **`ctx.adblock`:** `isEnabledFor`, `blockedCount`, `status`, `update`.
+3. **Контейнеры.**
+   - **Раздел настроек:** добавить, переименовать на месте, цвет из 9, очистить данные, удалить. Перед очисткой и удалением — подтверждение. При удалении закрываются вкладки контейнера и чистится сессия, а папка `Partitions/c-<id>` стирается при следующем запуске; это проверено.
+   - **Меню вкладки:** пункт «Открыть в контейнере ▸». Для ссылок такой пункт и «Новая вкладка в контейнере» в «⋯» уже были в ядре, проверил.
+   - **Чип с цветом и названием** в адресной строке; клик открывает меню контейнера.
+4. **Разрешения сайтов.**
+   - **Полоса под панелью** с галкой «Запомнить» и очередью («ещё N»). Покрывает уведомления, местоположение, камеру и микрофон по отдельности, MIDI, чтение буфера обмена, показ экрана, отслеживание бездействия, storage-access, локальную сеть и внешние протоколы.
+   - **Хранение.** Решения лежат в `settings.sitePermissions[origin]`, `check` отвечает по ним. При закрытии вкладки или переходе её вопросы снимаются.
+   - **Показ экрана** спрашивается через `setDisplayMediaRequestHandler` с выбором экрана или окна; «Запомнить» здесь нет, как в Chrome.
+   - **Внешние протоколы:** Electron получает отказ, а открываю я сам через `shell.openExternal`. Опасные схемы не открываются никогда, в том числе `http`, `https`, `file`, `javascript`, `ms-msdt`, `search-ms`.
+5. **Вход по HTTP (Basic, Digest, прокси).** Модальное окно с логином и паролем; если окно закрылось из-за потери фокуса, оно показывается снова. Для открытого http не на локальном адресе есть предупреждение. Пароль не пишется ни в лог, ни на диск.
+6. **Раздел «Приватность и блокировка».**
+   - Блокировщик вкл/выкл и статус списков с кнопкой «Обновить».
+   - Белый список: адрес приводится к хосту, есть проверка ввода.
+   - User-Agent: Chrome или свой, показан текущий. Ядро меняет его только у сессий, поэтому открытым вкладкам я меняю его сам.
+   - Очистка кэша и cookies всех контейнеров с подтверждением.
+   - Сохранённые разрешения: отозвать одно или «Забыть всё».
+
+## Как проверено (скриншоты в `C:\Users\Пользователь\Desktop\KOSMOLET\tools\dev-out\f-platform\`)
+
+| Что | Результат | Скриншот |
+|---|---|---|
+| lenta.ru | заблокировано 45–64, рекламный блок скрыт | 03, 04, 20 |
+| rbc.ru | заблокировано 8 | — |
+| seller.wildberries.ru | 0, не фильтруется | — |
+| Щит и кнопки расширений на панели | — | 01-toolbar-actions-zoom |
+| Попап Dark Reader под кнопкой (снимок склеен: попап — отдельное окно) | работает | 02 |
+| uBlock Origin Lite: установка по id, кнопка появилась | попап почти пустой: declarativeNetRequest в Electron нет | — |
+| JSON Formatter | форматирует JSON на api.github.com | 07 |
+| Web Store: «Установить» → окно подтверждения → Dark Reader установлен | работает | 06, 08 |
+| Распакованное тестовое расширение | загрузилось в оба контейнера, перезагрузка и «Настройки» работают | — |
+| Страница расширений, затем удаление всех трёх (папка пустая, кнопки ушли с панели) | работает | 05, 05b |
+| Уведомления на example.com | полоса → «Разрешить» → `granted`, решение сохранено | 10 |
+| Очередь из двух запросов; местоположение «без запоминания» не сохранилось | работает | 11 |
+| Ссылка `tg:` | «Запретить» с запоминанием → повторный запрос сразу отклонён | 12 |
+| Камера и микрофон одним запросом; показ экрана с выбором источника (проверен только отказ) | работает | 13 |
+| Вход по HTTP на локальном тестовом сервере | «Войти» → «Вход выполнен», «Отмена» → 401 | 14 |
+| Изоляция cookies | контейнер main видит `k=main-value`, второй — `k=work-value` | 15 |
+| Настройки контейнеров и приватности, подтверждение удаления, светлая тема | — | 16–20 |
+
+## Правки ядра (минимальные, только добавления)
+- `src/main/commands.js`: `addTabMenuProvider(fn)`, пункты фич встают в меню вкладки после «Выгрузить из памяти».
+- `src/main/sessions.js`: в CSP `img-src` добавлен `crx:` для иконок `<browser-action-list>`.
+
+## Мои файлы
+Все в `C:\Users\Пользователь\Desktop\KOSMOLET\src\`:
+- `main\features\platform.js`
+- `main\features\platform\` — `util.js`, `modal.js`, `adblock.js`, `adblock-worker.js`, `extensions.js`, `permissions.js`, `auth.js`, `containers.js`, `ui-preload-actions.js`
+- `renderer\chrome\features\platform.js` и `.css`, `renderer\overlay\features\platform.js` и `.css`
+- `renderer\pages\extensions\` — `index.html`, `extensions.js`, `extensions.css`
+- `renderer\pages\settings\sections\` — `containers.js` и `.css`, `privacy.js` и `.css`
+
+Новые хранилища: `extensions-unpacked.json`, `containers-purge.json`. Новых веток настроек нет.
+
+## Ограничения
+- **`chrome.webRequest` у расширений не срабатывает**, потому что сетью занят блокировщик. declarativeNetRequest в Electron не поддерживается, поэтому uBlock Origin Lite не работает. Об этом написано на странице расширений.
+- **Web Store показывает плашку «перейдите на браузер Chrome»**, хотя установка работает. Подмена бренда в Client Hints её не убрала.
+- **Заглушки для скриптов блокировщика не работают:** Chromium не даёт перенаправить запрос скрипта на `data:` (`ERR_UNSAFE_REDIRECT`). Итог — такой запрос просто блокируется, как и в ghostery.
+- **Отказ в показе экрана** приходит на страницу как `AbortError`, а не `NotAllowedError`, — так ведёт себя Electron. Само разрешение показа экрана я не нажимал, чтобы не снимать экран пользователя.
+- **Не проверял вживую, чтобы не трогать экран и программы пользователя:**
+  - нативные меню (чип контейнера, меню вкладки — проверены только шаблоны);
+  - диалог «Загрузить распакованное…» (проверена загрузка по пути);
+  - открытие внешнего приложения после «Разрешить»;
+  - вход на прокси.
+- **Первая страница после старта идёт без блокировщика и без расширений:** они грузятся позже, как и требовало задание.
+
+## Что нужно от соседей
+- **Ядру:** после перезагрузки страницы иконка вкладки пропадает (lenta.ru) — `page-favicon-updated` второй раз не приходит, а `tabs.js` при переходе обнуляет иконку. Поведение одинаковое с блокировщиком и без него.
+- **Главному агенту:** внести в ARCHITECTURE:
+  - каналы `kosmo:ext.*`, `kosmo:adblock.*`, `kosmo:perm.*`, `kosmo:containers.{stats,clearData,remove,chipMenu,newTab}`, `kosmo:privacy.*`, `kosmo:platform.modalRespond`;
+  - события `kosmo:adblock.counts`, `kosmo:adblock.status`, `kosmo:ext.changed`, `kosmo:perm.queue`;
+  - API `ctx.adblock`, `ctx.extensions`, `commands.addTabMenuProvider`.
+- **Всем:** `session.webRequest` на сессиях контейнеров (`onBeforeRequest`, `onHeadersReceived`) занят блокировщиком — у Electron один слушатель на событие. Если кому-то понадобится, нужно договориться о цепочке обработчиков.
+
+## tools-pack
+
+All six parts of tools-pack are built and checked on a live instance (profile f-tools). The core smoke test passes on that instance with no feature errors. I didn't edit any core or neighbor files, and the instance is shut down.
+
+**What was done**
+
+1. **Snippets.** Each snippet is a record in `snippets.json`. The panel tool has "Мои" plus the read-only library of 13 snippets (with «Копировать в мои»), a code editor and an output area.
+   - Editor keys: Tab and Shift+Tab indent selected lines, Ctrl+Enter runs, Ctrl+S saves, Ctrl+/ comments lines. The gutter marks the line of an error.
+   - Code runs in the active tab, in either the isolated world (default) or the page world. `await` and `return` work, and a single expression returns its own value. Syntax is checked before running, runtime errors show a stack mapped to the snippet's lines, and `console.*` output is captured.
+   - Results show as a JSON tree, a table (TSV/CSV buttons, plus "Только «nmId»"), a list of choices, or text with copying.
+   - Autorun: a switch plus a site field (`wildberries.ru`, `*.ozon.ru`, `ozon.ru/product/*`). It runs when a matching page finishes loading. The panel lists which autosnippets ran on the current tab, and a lightning icon appears in the address bar (a red dot means one failed).
+   - Palette command «Выполнить сниппет…» opens a search picker; the result opens in the panel.
+2. **X-ray.** It checks SEO, technologies, speed, server/CDN and security headers, each with a coloured status dot.
+   - Buttons: refresh, copy the report as Markdown, and «Отдать Claude». That button saves the report to the Claude inbox, copies the path and pastes it into the Claude terminal if one is open.
+   - It reruns by itself when you switch tabs or navigate.
+   - Headers come from the DevTools network capture; if that has none, the page is requested again in the same session.
+3. **Icon.** `assets/logo.svg` shows an arrow-shaped ship flying through an orbit ring. A simpler `logo-small.svg` is used at 16–24 px.
+   - `tools/make-icon.js` builds `icon.ico` (7 sizes, 16–256) and `icon.png` (512). I looked at the 16, 32 and 256 renders, and Windows' own decoder reads the ICO correctly.
+   - The window already loads `assets/icon.ico` through `windows.js`, so no core edit was needed. Asking Windows for the live window's icon returned the logo.
+   - Internal pages (settings, history, etc.) now show the logo as their tab icon.
+   - My module also sets the taskbar-pin details. Without them, pinning the window would pin bare `electron.exe`, which opens the Electron demo instead of Космолёт.
+4. **Shortcut script.** `tools/make-shortcut.ps1` creates «Космолёт.lnk» with every field from the task, and also sets AppUserModelID `Kosmolet` to match `main.js`. I created it in a temporary folder, read every property back, then deleted it. It was not run on the real desktop.
+5. **README.md** in Russian for a non-programmer, covering every point in the task. The hotkey table was checked against the live command list.
+6. **Settings sections.**
+   - «Производительность»: per-tab memory with a «Выгрузить» button, plus a list of all browser processes. It refreshes every 3 s while open.
+   - «Горячие клавиши»: all commands, plus shortcuts that aren't in the command list, with a search box.
+   - «О Космолёте»: versions, profile and Claude folders with «Открыть папку», and licences.
+
+**How it was checked.**
+- All 13 built-in snippets ran on real pages: example.com, MDN (ru home page and the en-US `<table>` page — the Russian table page returns 404), a Wildberries search (65 article numbers), an Ozon search (8 SKUs) and the GitHub login page (40 hidden fields). A local test page covered the copy/right-click unblock (confirmed the page can no longer block them), hidden fields, images without alt, tables and JSON-LD.
+- An autosnippet created through the panel fired on example.com.
+- X-ray ran on wildberries.ru and github.com.
+
+**Limitations**
+- On Wildberries search, products load late; run the WB snippet a couple of seconds after the page opens (the card markup has no product links, so names come from the cards themselves).
+- Speed figures are for the document's first load; X-ray says so when a single-page app has changed the address since.
+- The «Открыть папку» buttons were not clicked so no Explorer window would pop up on your screen. Only the error path was tested.
+- Clipboard actions were tested with the clipboard temporarily stubbed, so your real clipboard was not touched.
+- My test profile still has two test snippets and points its Claude inbox to `.profiles\f-tools\test-inbox`.
+
+**For neighbors and the main agent**
+- I only call optional APIs: `ctx.cdp.network/entry`, `ctx.bridge.toInbox`, `ctx.terminal.pasteToClaude`, and `KDev.jsonTree` (with a fallback if it's missing).
+- I expose `ctx.toolsPack = { snippets, builtins, runSnippet, xray, matchUrl }` for others to use.
+- After `kosmo://ui/panel` reloads, the panel comes back on DevTools rather than the last tool (core/devtools behaviour, not mine).
+- For ARCHITECTURE.md: my isolated world is id 1818, the new channels are `kosmo:snippets.*`, `kosmo:xray.*` and `kosmo:tools.*` (the `tools.*` ones are also open to internal pages), and the preload part is `41-tools-favicon`.
+- Run `tools\make-shortcut.ps1` yourself when ready.
+
+**Files** (all in `C:\Users\Пользователь\Desktop\KOSMOLET\`)
+- Main: `src\main\features\tools-pack.js` and the new folder `src\main\features\tools-pack\` (`runner.js`, `library.js`, `xray.js`)
+- Panel: `src\renderer\panel\tools\snippets.js` and `.css`, `src\renderer\panel\tools\xray.js` and `.css`
+- Overlay and chrome: `src\renderer\overlay\features\tools-pack.js` and `.css`, `src\renderer\chrome\features\tools-pack.js`
+- Settings: `src\renderer\pages\settings\sections\performance.js`, `shortcuts.js`, `about.js`, `tools-pack.css`
+- Assets and tools: `assets\` (`logo.svg`, `logo-small.svg`, `icon.ico`, `icon.png`), `tools\make-icon.js`, `tools\make-shortcut.ps1`, `README.md`
+
+Screenshots are in `tools\dev-out\f-tools\`:
+- Snippets: `01`–`03` (list, run, autorun), `09`–`10` (palette picker and result), `17`–`19` (error with line marker, WB articles, table chooser)
+- X-ray: `20`–`21` (wildberries.ru), `22`–`23` (github.com)
+- Settings: `11`–`16`
+- Icon: `icon-*.png` (sizes), `win-ico-*.png` (Windows decoder), `24-window-icon-*.png` (live window)
 

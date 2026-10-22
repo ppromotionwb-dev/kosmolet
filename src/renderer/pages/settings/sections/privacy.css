@@ -1,0 +1,52 @@
+/* Владелец: platform. Раздел «Приватность и блокировка». */
+
+.kpv-status { font-variant-numeric: tabular-nums; }
+.kpv-hint { color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.45; margin: 0; }
+.kpv-empty { font-size: var(--k-fs-sm); line-height: 1.45; }
+.kpv-err { color: var(--k-danger); font-size: var(--k-fs-sm); margin-top: 6px; }
+
+/* исключения */
+.kpv-allow { display: flex; flex-wrap: wrap; gap: 6px; }
+.kpv-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  height: 26px; padding: 0 2px 0 10px;
+  border-radius: var(--k-radius-pill);
+  background: var(--k-surface); border: 1px solid var(--k-border);
+  font-family: var(--k-mono); font-size: var(--k-fs-sm); color: var(--k-text);
+}
+.kpv-chip .k-icon-btn { width: 20px; height: 20px; border-radius: 50%; color: var(--k-text-faint); }
+.kpv-chip .k-icon-btn:hover { color: var(--k-danger); background: var(--k-danger-soft); }
+.kpv-allow-add { display: flex; gap: 8px; }
+.kpv-allow-input { flex: 1 1 auto; max-width: 360px; }
+
+/* User-Agent */
+.kpv-ua-wrap { display: flex; flex-direction: column; gap: 4px; }
+.kpv-ua-label { font-size: var(--k-fs-sm); }
+.kpv-ua { font-size: var(--k-fs-xs); color: var(--k-text-dim); overflow-wrap: anywhere; user-select: text; line-height: 1.5; }
+
+/* подтверждение в строке */
+.kpv-confirm-box { display: flex; align-items: center; gap: 8px; }
+.kpv-confirm-text { color: var(--k-text-dim); font-size: var(--k-fs-sm); max-width: 220px; text-align: right; }
+
+/* разрешения сайтов */
+.kpv-perms { display: flex; flex-direction: column; margin: -4px 0; }
+.kpv-prow { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.kpv-prow + .kpv-prow { border-top: 1px solid var(--k-border); }
+.kpv-pmain { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.kpv-phost { font-weight: 500; color: var(--k-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpv-pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kpv-pchip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 2px 0 8px;
+  border-radius: var(--k-radius-pill);
+  font-size: var(--k-fs-sm);
+  background: var(--k-surface); color: var(--k-text-dim);
+  border: 1px solid var(--k-border);
+}
+.kpv-pchip.allow > .k-ic { color: var(--k-ok); }
+.kpv-pchip.deny > .k-ic { color: var(--k-danger); }
+.kpv-pchip-v { font-size: var(--k-fs-xs); font-weight: 600; padding: 0 2px; }
+.kpv-pchip.allow .kpv-pchip-v { color: var(--k-ok); }
+.kpv-pchip.deny .kpv-pchip-v { color: var(--k-danger); }
+.kpv-pchip-x { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--k-text-faint); }
+.kpv-pchip-x:hover { color: var(--k-text); background: var(--k-surface-hover); }

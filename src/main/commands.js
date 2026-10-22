@@ -344,6 +344,21 @@ function createCommands(ctx) {
 
   // ---------- контекстное меню вкладки ----------
 
+  // Пункты фич в меню вкладки: addTabMenuProvider((tab) => MenuItemOptions[]) — после «Выгрузить из памяти».
+  const tabMenuProviders = [];
+  function addTabMenuProvider(fn) {
+    if (typeof fn !== 'function') return () => {};
+    tabMenuProviders.push(fn);
+    return () => { const i = tabMenuProviders.indexOf(fn); if (i >= 0) tabMenuProviders.splice(i, 1); };
+  }
+  function tabMenuExtra(tab) {
+    const out = [];
+    for (const fn of tabMenuProviders) {
+      try { const items = fn(tab); if (Array.isArray(items)) out.push(...items.filter((x) => x && typeof x === 'object')); } catch (e) { ctx.log('commands', 'меню вкладки:', e); }
+    }
+    return out;
+  }
+
   function tabMenuTemplate(id) {
     const tab = T().get(id);
     if (!tab) return [];
@@ -359,6 +374,7 @@ function createCommands(ctx) {
       { label: tab.info.pinned ? 'Открепить' : 'Закрепить', click: () => T().pin(tab.id) },
       { label: tab.info.muted ? 'Включить звук' : 'Без звука', click: () => T().mute(tab.id) },
       { label: 'Выгрузить из памяти', enabled: !!tab.view && tab.id !== T().activeId, click: () => T().discard(tab.id) },
+      ...tabMenuExtra(tab),
       { type: 'separator' },
       { label: 'Закрыть', accelerator: 'Ctrl+W', registerAccelerator: false, click: () => T().close(tab.id) },
       { label: 'Закрыть другие', enabled: others.length > 0, click: () => T().closeMany(others.map((t) => t.id)) },
@@ -369,7 +385,7 @@ function createCommands(ctx) {
   }
 
   return {
-    register, unregister, run, list, attach, match, addBypass,
+    register, unregister, run, list, attach, match, addBypass, addTabMenuProvider,
     get: (id) => commands.get(id) || null,
     registerBase,
     appMenuTemplate,

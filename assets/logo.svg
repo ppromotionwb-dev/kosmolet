@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Космолёт: корабль-стрела пролетает сквозь кольцо орбиты. Цвета темы cosmos. -->
+  <defs>
+    <linearGradient id="k-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#272f52"/>
+      <stop offset="1" stop-color="#10131e"/>
+    </linearGradient>
+    <linearGradient id="k-ring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6553ff"/>
+      <stop offset="1" stop-color="#ab9fff"/>
+    </linearGradient>
+    <!-- просвет между кораблём и передней половиной кольца -->
+    <mask id="k-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect width="256" height="256" fill="#fff"/>
+      <path d="M230 140A102 38 0 0 1 26 140" transform="rotate(-20 128 140)" fill="none" stroke="#000" stroke-width="32" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#k-bg)"/>
+  <rect x="9" y="9" width="238" height="238" rx="55" fill="none" stroke="#9aa6ff" stroke-opacity=".24" stroke-width="2"/>
+  <!-- задняя половина орбиты -->
+  <path d="M26 140A102 38 0 0 1 230 140" transform="rotate(-20 128 140)" fill="none" stroke="url(#k-ring)" stroke-width="15" stroke-linecap="round"/>
+  <!-- корабль -->
+  <g mask="url(#k-cut)">
+    <g transform="translate(126 120) rotate(28)">
+      <path d="M0 -94L40 54L0 31Z" fill="#ffffff"/>
+      <path d="M0 -94L-40 54L0 31Z" fill="#bcc2f2"/>
+    </g>
+  </g>
+  <!-- передняя половина орбиты -->
+  <path d="M230 140A102 38 0 0 1 26 140" transform="rotate(-20 128 140)" fill="none" stroke="url(#k-ring)" stroke-width="15" stroke-linecap="round"/>
+</svg>

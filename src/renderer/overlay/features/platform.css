@@ -1,0 +1,60 @@
+/* Владелец: platform. Поповер блокировщика, вход на сайт, установка расширения. */
+
+.kpo-pop { padding: 0; overflow: hidden; }
+.kpo-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 10px; }
+.kpo-ic {
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 10px;
+  background: var(--k-accent-soft); color: var(--k-accent-text);
+}
+.kpo-pop.off .kpo-ic { background: var(--k-surface); color: var(--k-text-faint); }
+.kpo-head-text { flex: 1; min-width: 0; }
+.kpo-title { font-weight: 600; color: var(--k-text); }
+.kpo-sub { color: var(--k-text-faint); font-size: var(--k-fs-sm); margin-top: 1px; }
+
+.kpo-row {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 8px; padding: 10px 8px;
+  border-top: 1px solid var(--k-border);
+  cursor: pointer;
+}
+.kpo-row[hidden] { display: none; }
+.kpo-row-text { flex: 1; min-width: 0; }
+.kpo-row-label { color: var(--k-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpo-row-hint { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin-top: 2px; }
+
+.kpo-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 14px 12px; transition: opacity var(--k-dur) var(--k-ease); }
+.kpo-stats.dim { opacity: 0.45; }
+.kpo-stat { padding: 8px 10px; border-radius: var(--k-radius); background: var(--k-bg-sunken); border: 1px solid var(--k-border); }
+.kpo-num { font-size: var(--k-fs-xl); font-weight: 600; line-height: 1.1; color: var(--k-text); font-variant-numeric: tabular-nums; }
+.kpo-stat-label { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin-top: 2px; }
+
+.kpo-note { margin: 0 14px 10px; color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.4; }
+.kpo-note[hidden] { display: none; }
+.kpo-foot { display: flex; justify-content: flex-start; padding: 6px 8px; border-top: 1px solid var(--k-border); background: var(--k-bg-elev); }
+
+/* ---------- модальные окна ---------- */
+.kpo-modal { padding: 18px 20px 16px; }
+.kpo-form { display: flex; flex-direction: column; gap: 12px; }
+.kpo-mhead { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+.kpo-mhead > div { min-width: 0; }
+.kpo-mhead .kpo-title { font-size: var(--k-fs-lg); }
+.kpo-ext-icon { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; object-fit: contain; }
+.kpo-realm { color: var(--k-text-dim); font-size: var(--k-fs-sm); word-break: break-word; }
+.kpo-warn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--k-radius);
+  background: var(--k-warn-soft); color: var(--k-text); font-size: var(--k-fs-sm);
+}
+.kpo-warn .k-ic { color: var(--k-warn); flex-shrink: 0; }
+.kpo-field { display: flex; flex-direction: column; gap: 5px; }
+.kpo-field > span { color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kpo-field .k-input { width: 100%; }
+.kpo-mfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+.kpo-label { color: var(--k-text-dim); font-size: var(--k-fs-sm); margin: 12px 0 6px; }
+.kpo-perms { margin: 0; padding: 0 0 0 18px; color: var(--k-text); display: flex; flex-direction: column; gap: 3px; }
+.kpo-perms li { line-height: 1.4; }
+.kpo-perms li.strong { color: var(--k-warn); }
+.kpo-modal .kpo-note { margin: 12px 0 4px; color: var(--k-text-faint); }
+.kpo-modal .kpo-mfoot { margin-top: 14px; }

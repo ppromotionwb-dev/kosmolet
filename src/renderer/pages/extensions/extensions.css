@@ -1,0 +1,44 @@
+/* Владелец: platform. kosmo://extensions/ */
+
+.ke-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14vh 0; }
+.ke-intro { color: var(--k-text-dim); margin: 0 2px 14px; }
+.ke-list { display: flex; flex-direction: column; gap: 10px; }
+
+.ke-card {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 14px 14px 16px;
+  background: var(--k-bg-elev);
+  border: 1px solid var(--k-border);
+  border-radius: var(--k-radius-lg);
+  transition: opacity var(--k-dur) var(--k-ease), border-color var(--k-dur-fast) var(--k-ease);
+}
+.ke-card:hover { border-color: var(--k-border-strong); }
+.ke-card.busy { opacity: 0.55; }
+
+.ke-icon { width: 40px; height: 40px; border-radius: 8px; flex-shrink: 0; object-fit: contain; }
+.ke-icon-empty { display: inline-grid; place-items: center; background: var(--k-surface); color: var(--k-text-faint); }
+
+.ke-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ke-name { font-weight: 600; font-size: var(--k-fs-lg); color: var(--k-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ke-desc { color: var(--k-text-dim); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ke-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--k-text-faint); font-size: var(--k-fs-sm); margin-top: 2px; }
+.ke-mv { font-size: var(--k-fs-xs); }
+.ke-idrow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ke-id {
+  padding: 1px 6px; margin-left: -6px;
+  border-radius: var(--k-radius-sm);
+  color: var(--k-text-faint); font-size: var(--k-fs-xs);
+}
+.ke-id:hover { background: var(--k-surface); color: var(--k-text-dim); }
+.ke-path { color: var(--k-text-faint); font-size: var(--k-fs-xs); min-width: 0; }
+
+.ke-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ke-del:hover { color: var(--k-danger); }
+.ke-confirm { color: var(--k-text-dim); font-size: var(--k-fs-sm); margin-right: 6px; max-width: 240px; }
+
+.ke-note { margin: 18px 2px 0; font-size: var(--k-fs-sm); line-height: 1.45; }
+
+@media (max-width: 640px) {
+  .ke-card { flex-wrap: wrap; }
+  .ke-actions { width: 100%; justify-content: flex-end; }
+}

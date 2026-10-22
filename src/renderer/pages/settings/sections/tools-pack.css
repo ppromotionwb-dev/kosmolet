@@ -1,0 +1,48 @@
+/* Владелец: tools-pack. Разделы настроек «Производительность», «Горячие клавиши», «О Космолёте». */
+
+/* ---------- память ---------- */
+.tps-mem .ks-free { padding: 10px 16px; }
+.tps-mem-head { display: flex; align-items: center; gap: 10px; }
+.tps-mem-total { display: flex; align-items: center; gap: 6px; color: var(--k-text-dim); }
+.tps-mem-total b { color: var(--k-text); font-size: var(--k-fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tps-mem-list { display: flex; flex-direction: column; margin: -2px -8px; }
+.tps-mem-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) 128px auto; align-items: center; gap: 10px; min-height: 44px; padding: 4px 8px; border-radius: var(--k-radius); }
+.tps-mem-row:hover { background: var(--k-surface-hover); }
+.tps-mem-row.off { opacity: 0.6; }
+.tps-fav { width: 16px; height: 16px; display: grid; place-items: center; color: var(--k-text-faint); border-radius: 3px; }
+.tps-mem-text { min-width: 0; }
+.tps-mem-title { font-size: var(--k-fs); }
+.tps-mem-sub { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.tps-mem-val { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-variant-numeric: tabular-nums; font-size: var(--k-fs-sm); }
+.tps-bar { width: 100%; height: 4px; border-radius: 2px; background: var(--k-surface); overflow: hidden; }
+.tps-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--k-accent); opacity: 0.75; }
+.tps-mem-foot { display: flex; align-items: center; gap: 12px; }
+.tps-mem-note { margin-left: auto; color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.tps-linkbtn { color: var(--k-accent-text); font-size: var(--k-fs-sm); }
+.tps-linkbtn:hover { text-decoration: underline; }
+.tps-mem-procs { margin-top: 8px; }
+.tps-proc { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 80px; gap: 12px; align-items: center; min-height: 28px; padding: 2px 8px; font-size: var(--k-fs-sm); border-radius: var(--k-radius-sm); }
+.tps-proc:hover { background: var(--k-surface-hover); }
+.tps-proc-title { color: var(--k-text); }
+.tps-proc-meta { color: var(--k-text-faint); font-variant-numeric: tabular-nums; }
+.tps-proc-mem { text-align: right; font-variant-numeric: tabular-nums; }
+.tps-none { color: var(--k-text-faint); padding: 8px; }
+
+/* ---------- горячие клавиши ---------- */
+.tps-sc-search { margin-bottom: 14px; }
+.tps-combo { display: inline-flex; align-items: center; gap: 2px; }
+.tps-combo + .tps-combo { margin-left: 8px; }
+.tps-plus { color: var(--k-text-faint); font-size: var(--k-fs-xs); padding: 0 1px; }
+.ks-row.tps-nokeys .ks-row-label { color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.ks-row.tps-nokeys .ks-row-hint { color: var(--k-text-dim); }
+
+/* ---------- о программе ---------- */
+.tps-about-head { display: flex; align-items: center; gap: 16px; }
+.tps-logo { width: 56px; height: 56px; flex-shrink: 0; }
+.tps-path { overflow-wrap: anywhere; user-select: text; font-size: var(--k-fs-sm); }
+.tps-path-line { margin-top: 4px; }
+.tps-lic { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 28px; }
+.tps-lic-row { display: flex; justify-content: space-between; gap: 10px; min-width: 0; font-size: var(--k-fs-sm); }
+.tps-lic-row a { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tps-lic-row .k-dim { text-align: right; }
+.tps-lic-note { color: var(--k-text-faint); font-size: var(--k-fs-sm); }

@@ -1,0 +1,75 @@
+/* Владелец: platform. Действия расширений, щит блокировщика, чип контейнера, полоса разрешений. */
+
+/* ---------- действия расширений ---------- */
+.kp-actions { display: flex; align-items: center; -webkit-app-region: no-drag; }
+.kp-actions[hidden] { display: none; }
+.kp-actions browser-action-list {
+  display: flex; gap: 2px;
+  --browser-action-hover-bg: var(--k-surface-hover);
+  --browser-action-badge-outline: var(--k-bg);
+}
+.kp-actions browser-action-list::part(action) {
+  width: var(--k-icon-btn); height: var(--k-icon-btn);
+  border-radius: var(--k-radius);
+  background-size: 16px 16px;
+  transition: background-color var(--k-dur-fast) var(--k-ease);
+}
+.kp-actions browser-action-list::part(action):hover { background-color: var(--k-surface-hover); }
+.kp-actions browser-action-list::part(action):active { background-color: var(--k-surface-active); }
+.kp-actions browser-action-list::part(badge) {
+  height: 13px; min-width: 13px; padding: 0 3px;
+  border-radius: 7px;
+  bottom: 1px; right: 0;
+  font-size: 9px; font-weight: 700; line-height: 13px; text-align: center;
+  box-shadow: 0 0 0 2px var(--k-bg);
+}
+
+/* ---------- щит блокировщика ---------- */
+#slot-omnibox-right .kp-shield { position: relative; }
+#slot-omnibox-right .kp-shield .k-ic { color: var(--k-text-dim); }
+#slot-omnibox-right .kp-shield:hover .k-ic { color: var(--k-text); }
+#slot-omnibox-right .kp-shield.off .k-ic { color: var(--k-text-faint); }
+#slot-omnibox-right .kp-shield .k-badge-dot {
+  top: auto; bottom: 0; right: -3px;
+  min-width: 13px; height: 12px; padding: 0 3px;
+  border-radius: 6px; line-height: 12px; font-size: 8px; font-weight: 700;
+  background: var(--k-surface-active); color: var(--k-text);
+  box-shadow: 0 0 0 2px var(--omni-bg, var(--k-bg));
+}
+#omnibox:hover #slot-omnibox-right .kp-shield .k-badge-dot { box-shadow: 0 0 0 2px var(--omni-hover, var(--k-surface)); }
+
+/* ---------- чип контейнера ---------- */
+.kp-container {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 1; min-width: 0;
+  max-width: 160px;
+  height: calc(var(--k-bar-h) - 16px);
+  padding: 0 9px 0 8px; margin-left: 2px;
+  border-radius: var(--k-radius-pill);
+  background: color-mix(in srgb, var(--kp-c, var(--k-accent)) 16%, transparent);
+  color: var(--k-text);
+  font-size: var(--k-fs-sm); font-weight: 500; white-space: nowrap;
+  -webkit-app-region: no-drag;
+  transition: background-color var(--k-dur-fast) var(--k-ease);
+}
+.kp-container[hidden] { display: none; }
+.kp-container:hover { background: color-mix(in srgb, var(--kp-c, var(--k-accent)) 26%, transparent); }
+.kp-cdot { width: 8px; height: 8px; border-radius: 50%; background: var(--kp-c, var(--k-accent)); flex-shrink: 0; }
+.kp-cname { min-width: 0; }
+#omnibox.focused .kp-container { display: none; }
+
+/* ---------- полоса разрешений ---------- */
+.kp-perm { gap: 10px; padding: 4px 8px 4px 12px; min-height: calc(var(--k-bm-h) + 8px); background: var(--k-bg-elev); }
+.kp-perm-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--k-accent-soft); color: var(--k-accent-text); flex-shrink: 0; }
+.kp-perm-body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.kp-perm-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--k-text-dim); }
+.kp-perm-text b { color: var(--k-text); font-weight: 600; }
+.kp-perm-kind, .kp-perm-scheme { color: var(--k-text); }
+.kp-perm-scheme { font-family: var(--k-mono); font-size: var(--k-fs-sm); }
+.kp-perm-more { color: var(--k-text-faint); font-size: var(--k-fs-xs); white-space: nowrap; }
+.kp-perm-more[hidden] { display: none; }
+.kp-perm-src { height: var(--k-ctl-h-sm); max-width: 240px; font-size: var(--k-fs-sm); }
+.kp-perm-src[hidden] { display: none; }
+.kp-perm-remember { display: inline-flex; align-items: center; gap: 6px; color: var(--k-text-dim); font-size: var(--k-fs-sm); white-space: nowrap; cursor: pointer; }
+.kp-perm-remember[hidden] { display: none; }
+.kp-perm .k-btn { flex-shrink: 0; }
+.kp-perm .k-icon-btn { flex-shrink: 0; }

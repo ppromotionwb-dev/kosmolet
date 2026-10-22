@@ -1,6 +1,7 @@
 /* Владелец: claude-terminal. Инструмент «Claude»: терминал (xterm) и журнал действий Claude.
-   Цвета терминала собираются из токенов темы; 16 цветов ANSI — своя палитра под тёмную и светлую схему
-   (в tokens.css нет синего, пурпурного и голубого). claude.js читает их через --kc-* и передаёт в xterm. */
+   Цвета терминала собираются из токенов темы. В tokens.css нет синего, пурпурного и голубого — они выводятся
+   из --k-ok поворотом оттенка (oklch from …): та же светлота и насыщенность, что у «зелёного» темы.
+   claude.js читает --kc-* и передаёт в xterm. */
 
 .tool-body.kc { overflow: hidden; }
 
@@ -20,17 +21,17 @@
   --kc-red: var(--k-danger);
   --kc-green: var(--k-ok);
   --kc-yellow: var(--k-warn);
-  --kc-blue: #6f9bff;
-  --kc-magenta: #c58cf5;
-  --kc-cyan: #4cc5d6;
+  --kc-blue: oklch(from var(--k-ok) calc(l + 0.02) calc(c * 0.95) 262);
+  --kc-magenta: oklch(from var(--k-ok) calc(l + 0.02) calc(c * 0.95) 318);
+  --kc-cyan: oklch(from var(--k-ok) l calc(c * 0.9) 210);
   --kc-white: color-mix(in oklab, var(--k-text), var(--kc-term-bg) 18%);
   --kc-bright-black: var(--k-text-faint);
   --kc-bright-red: color-mix(in oklab, var(--k-danger), white 22%);
   --kc-bright-green: color-mix(in oklab, var(--k-ok), white 22%);
   --kc-bright-yellow: color-mix(in oklab, var(--k-warn), white 25%);
-  --kc-bright-blue: #98b6ff;
-  --kc-bright-magenta: #dbb0ff;
-  --kc-bright-cyan: #86dbe8;
+  --kc-bright-blue: color-mix(in oklab, var(--kc-blue), white 25%);
+  --kc-bright-magenta: color-mix(in oklab, var(--kc-magenta), white 25%);
+  --kc-bright-cyan: color-mix(in oklab, var(--kc-cyan), white 25%);
   --kc-bright-white: color-mix(in oklab, var(--k-text), white 40%);
 }
 :root[data-scheme="light"] .kc-root {
@@ -41,17 +42,17 @@
   --kc-red: var(--k-danger);
   --kc-green: var(--k-ok);
   --kc-yellow: var(--k-warn);
-  --kc-blue: #2f62d6;
-  --kc-magenta: #8e44c9;
-  --kc-cyan: #13819a;
+  --kc-blue: oklch(from var(--k-ok) calc(l - 0.04) calc(c * 1.25) 262);
+  --kc-magenta: oklch(from var(--k-ok) calc(l - 0.04) calc(c * 1.25) 318);
+  --kc-cyan: oklch(from var(--k-ok) calc(l - 0.02) c 215);
   --kc-white: var(--k-text-dim);
   --kc-bright-black: var(--k-text-faint);
   --kc-bright-red: color-mix(in oklab, var(--k-danger), black 12%);
   --kc-bright-green: color-mix(in oklab, var(--k-ok), black 12%);
   --kc-bright-yellow: color-mix(in oklab, var(--k-warn), black 10%);
-  --kc-bright-blue: #3c74f0;
-  --kc-bright-magenta: #a35ad8;
-  --kc-bright-cyan: #1797b3;
+  --kc-bright-blue: color-mix(in oklab, var(--kc-blue), black 12%);
+  --kc-bright-magenta: color-mix(in oklab, var(--kc-magenta), black 12%);
+  --kc-bright-cyan: color-mix(in oklab, var(--kc-cyan), black 12%);
   --kc-bright-white: var(--k-text-faint);
 }
 
@@ -165,6 +166,8 @@
 .kc-stage.empty { background: var(--k-bg); }
 .kc-xterm { position: absolute; inset: 0; overflow: hidden; }
 .kc-xterm .xterm { height: 100%; padding: 6px 0 2px 10px; }
+/* xterm.css красит viewport в #000 (под полями) — фон даёт .kc-stage того же цвета, что и тема терминала */
+.kc-xterm .xterm .xterm-viewport { background-color: transparent; }
 .kc-xterm .xterm:focus, .kc-xterm .xterm.focus { outline: none; }
 .kc-xterm .xterm .xterm-scrollable-element > .shadow.top { box-shadow: none; }
 

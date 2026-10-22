@@ -71,6 +71,39 @@ function checkArg(a, what) {
   return a;
 }
 
+// ConPTY. PowerShell и cmd запускаются через conpty.dll + OpenConsole.exe из node-pty, а не через системный
+// ConPTY Windows 10: системный оставляет висеть conhost.exe после того, как оболочка сама завершилась (exit),
+// и не понимает win32-input-mode. Если conpty.dll не запустился — системный ConPTY. Git Bash — системный.
+// Windows PowerShell 5.1 со встроенным PSReadLine 2.0.0 теряет символы, которые ConPTY превращает в нажатия
+// «Shift+клавиша» по раскладке (заглавные А, О, Ж, Э… и №): срабатывает чужой обработчик клавиш.
+// Обход для PowerShell: каждый символ вне ASCII отправляется событием клавиши без модификаторов
+// (win32-input-mode: ESC [ Vk ; Sc ; Uc ; Kd ; Cs ; Rc _ с Vk=0). Программы, читающие консоль (claude, node),
+// получают тот же символ.
+let dllCache;
+function conptyDllAvailable() {
+  if (dllCache !== undefined) return dllCache;
+  dllCache = false;
+  try {
+    const root = path.dirname(require.resolve('node-pty/package.json'));
+    for (const d of [path.join(root, 'build', 'Release', 'conpty'), path.join(root, 'prebuilds', 'win32-' + process.arch, 'conpty')]) {
+      if (isFile(path.join(d, 'conpty.dll')) && isFile(path.join(d, 'OpenConsole.exe'))) { dllCache = true; break; }
+    }
+  } catch (_) { /* нет node-pty — запуск всё равно упадёт с понятной ошибкой */ }
+  return dllCache;
+}
+
+const NON_ASCII = /[^\x00-\x7f]/;
+function encodeWin32Input(data) {
+  if (!NON_ASCII.test(data)) return data;
+  let out = '';
+  for (let i = 0; i < data.length; i++) {
+    const code = data.charCodeAt(i);
+    if (code < 0x80) { out += data[i]; continue; }
+    out += `\x1b[0;0;${code};1;0;1_\x1b[0;0;${code};0;0;1_`;
+  }
+  return out;
+}
+
 function init(ctx) {
   const S = ctx.settings;
   // claude.shell объявляет и claude-bridge (раздел настроек «Claude») — повтор безопасен, нужен, если моста нет.
@@ -234,7 +267,7 @@ function init(ctx) {
   function info(s) {
     return {
       id: s.id, title: s.title, profile: s.profile, alive: s.alive, exitCode: s.exitCode,
-      pid: s.pid, cwd: s.cwd, cols: s.cols, rows: s.rows, createdAt: s.createdAt, shell: s.shell,
+      pid: s.pid, cwd: s.cwd, cols: s.cols, rows: s.rows, createdAt: s.createdAt, shell: s.shell, conptyDll: !!s.conptyDll,
       focused: s.id === focusId,
     };
   }
@@ -307,9 +340,19 @@ function init(ctx) {
     s.exitCode = ev && typeof ev.exitCode === 'number' ? ev.exitCode : null;
     s.pty = null;
     disposeListeners(s);
+    releaseConout(p);
     ctx.log('terminal', `сессия ${s.id} (${s.title}) завершилась, код ${s.exitCode}`);
     toPanel('kosmo:term.exit', { id: s.id, code: s.exitCode });
     emitSessions();
+  }
+
+  // node-pty 1.1 после естественного выхода процесса не останавливает поток (worker) чтения вывода —
+  // он освобождается только в kill(). Закрываем сами, иначе на каждую завершившуюся сессию висит worker.
+  function releaseConout(p) {
+    try {
+      const w = p && p._agent && p._agent._conoutSocketWorker;
+      if (w && typeof w.dispose === 'function') w.dispose();
+    } catch (e) { ctx.log('terminal', 'conout:', e.message); }
   }
 
   function disposeListeners(s) {
@@ -320,15 +363,26 @@ function init(ctx) {
     const spec = buildSpawn(s.profile, opts);
     const cols = clampInt(opts.cols, 20, 500, s.cols || 100);
     const rows = clampInt(opts.rows, 5, 300, s.rows || 30);
+    const base = { name: 'xterm-256color', cols, rows, cwd: s.cwd, env: makeEnv(), useConpty: true };
+    // conpty.dll из node-pty (см. выше); не вышло — системный ConPTY. Git Bash — всегда системный:
+    // под новым ConPTY bash из MSYS2 теряет первый символ, набранный после изменения размера.
+    let useDll = IS_WIN && conptyDllAvailable() && (opts.conptyDll === true || (opts.conptyDll !== false && spec.shell !== 'bash'));
     let p;
     try {
-      p = pty().spawn(spec.file, spec.args, {
-        name: 'xterm-256color', cols, rows, cwd: s.cwd, env: makeEnv(), useConpty: true,
-      });
+      p = pty().spawn(spec.file, spec.args, Object.assign({ useConptyDll: useDll }, base));
     } catch (e) {
-      throw new Error(`Не удалось запустить ${path.basename(spec.file)}: ${e.message}`);
+      if (!useDll) throw new Error(`Не удалось запустить ${path.basename(spec.file)}: ${e.message}`);
+      ctx.log('terminal', 'conpty.dll не сработал, системный ConPTY:', e.message);
+      useDll = false;
+      try {
+        p = pty().spawn(spec.file, spec.args, base);
+      } catch (e2) {
+        throw new Error(`Не удалось запустить ${path.basename(spec.file)}: ${e2.message}`);
+      }
     }
     s.pty = p;
+    s.conptyDll = useDll;
+    s.encodeInput = useDll && spec.shell === 'powershell'; // обход PSReadLine 2.0 (см. encodeWin32Input)
     s.pid = p.pid;
     s.cols = cols;
     s.rows = rows;
@@ -341,7 +395,7 @@ function init(ctx) {
     s.disposers.push(p.onExit((ev) => onExit(s, p, ev)));
     // без своего обработчика node-pty бросает ошибку сокета наверх
     if (typeof p.on === 'function') { try { p.on('error', (e) => ctx.log('terminal', `сессия ${s.id}:`, e && e.message)); } catch (_) { /* нет EventEmitter */ } }
-    ctx.log('terminal', `сессия ${s.id} (${s.title}) запущена: pid ${p.pid}, ${path.basename(spec.file)}, ${cols}×${rows}, ${s.cwd}`);
+    ctx.log('terminal', `сессия ${s.id} (${s.title}) запущена: pid ${p.pid}, ${path.basename(spec.file)}, ${cols}×${rows}, ${useDll ? 'conpty.dll' : 'ConPTY Windows'}, ${s.cwd}`);
   }
 
   function clampInt(v, min, max, def) {
@@ -378,7 +432,11 @@ function init(ctx) {
     if (typeof data !== 'string' || !data) return false;
     if (data.length > WRITE_LIMIT) data = data.slice(0, WRITE_LIMIT);
     s.lastUsed = Date.now();
-    try { s.pty.write(data); } catch (e) { ctx.log('terminal', `запись в ${s.id}:`, e.message); return false; }
+    return ptyWrite(s, data);
+  }
+
+  function ptyWrite(s, data) {
+    try { s.pty.write(s.encodeInput ? encodeWin32Input(data) : data); } catch (e) { ctx.log('terminal', `запись в ${s.id}:`, e.message); return false; }
     return true;
   }
 
@@ -418,7 +476,8 @@ function init(ctx) {
     s.alive = false;
     if (!p) return;
     killTree([p.pid], sync);
-    if (!sync) { try { p.kill(); } catch (_) { /* уже завершён */ } }
+    if (!sync || s.conptyDll) { try { p.kill(); } catch (_) { /* уже завершён */ } }
+    if (!sync && s.conptyDll) releaseConout(p); // conpty.dll: node-pty ждёт данных, которых уже не будет
   }
 
   function kill(id) {
@@ -470,7 +529,12 @@ function init(ctx) {
     }
     if (sync) {
       killTree(pids, true);
-      for (const s of list) { s.pty = null; s.alive = false; }
+      for (const s of list) {
+        // conpty.dll: закрыть псевдоконсоль, чтобы OpenConsole.exe завершился вместе с нами (без форка помощника)
+        if (s.pty && s.conptyDll) { try { s.pty.kill(); } catch (_) { /* уже */ } }
+        s.pty = null;
+        s.alive = false;
+      }
     } else {
       for (const s of list) stopPty(s, false);
     }
@@ -505,7 +569,7 @@ function init(ctx) {
     if (!t) return false;
     // приложение включило bracketed paste — вставка целиком; иначе переводы строк не отправляем (они бы нажали Enter)
     t = s.bracketed ? '\x1b[200~' + t + '\x1b[201~' : t.replace(/\n+/g, ' ');
-    try { s.pty.write(t); } catch (e) { ctx.log('terminal', 'pasteToClaude:', e.message); return false; }
+    if (!ptyWrite(s, t)) return false;
     s.lastUsed = Date.now();
     show(s.id, true);
     return true;
