@@ -70,7 +70,7 @@ function createTabs(ctx) {
 
   function containerInfo(id) {
     const c = ctx.sessions.container(id);
-    return { containerColor: c.color, containerName: c.name };
+    return { containerColor: c.color, containerName: c.name, containerTemp: !!c.temp };
   }
 
   function makeInfo(id, containerId, url, o) {
@@ -457,7 +457,7 @@ function createTabs(ctx) {
 
   function create(opts = {}) {
     const opener = opts.openerId != null ? get(opts.openerId) : null;
-    const containerId = ctx.sessions.normalizeId(opts.containerId || (opener && opener.info.containerId) || 'main');
+    const containerId = ctx.sessions.resolve(opts.containerId || (opener && opener.info.containerId) || 'main');
     const url = opts.webContents ? String(opts.url || 'about:blank') : normalizeUrl(opts.url);
     const id = nextId++;
     const tab = new Tab(mgr, id, makeInfo(id, containerId, url, opts));
@@ -966,6 +966,11 @@ function registerTabsIpc(ctx) {
       index: typeof p.index === 'number' ? p.index : undefined, pinned: !!p.pinned,
       openerId: p.openerId != null ? p.openerId : (meta.kind === 'internal' && meta.tab ? meta.tab.id : undefined),
     };
+    // Изолированная вкладка (свой временный контейнер): явно isolated или «новая вкладка» интерфейса
+    // при включённом privacy.isolateNewTabs (ссылки и окна страниц остаются в контейнере открывшей вкладки).
+    const iso = ctx.platform && ctx.platform.containers;
+    const auto = meta.kind === 'ui' && p.containerId == null && opts.openerId == null && p.isolated !== false && ctx.settings.peek('privacy.isolateNewTabs') === true;
+    if (iso && (p.isolated === true || auto)) return info(iso.openIsolated(opts).tab);
     return info(T.create(opts));
   }, both);
   ctx.ipc.handle('kosmo:tabs.close', (p = {}, meta) => {

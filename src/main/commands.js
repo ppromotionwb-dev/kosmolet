@@ -212,7 +212,17 @@ function createCommands(ctx) {
   function registerBase() {
     register({
       id: 'tab.new', title: 'Новая вкладка', category: 'Вкладки', keys: ['Ctrl+T'], appMenu: { section: 'new', order: 10 },
-      run: (a) => { T().create({ url: T().NEWTAB, containerId: a && a.containerId }); chromeCmd('focusOmnibox'); },
+      run: (a) => {
+        const iso = ctx.platform && ctx.platform.containers;
+        if (iso && !(a && a.containerId) && ctx.settings.peek('privacy.isolateNewTabs') === true) iso.openIsolated({});
+        else T().create({ url: T().NEWTAB, containerId: a && a.containerId });
+        chromeCmd('focusOmnibox');
+      },
+    });
+    register({
+      id: 'tab.newIsolated', title: 'Новая изолированная вкладка', category: 'Вкладки', keys: ['Ctrl+Shift+N'], appMenu: { section: 'new', order: 15 },
+      when: () => !!(ctx.platform && ctx.platform.containers),
+      run: () => { ctx.platform.containers.openIsolated({}); chromeCmd('focusOmnibox'); },
     });
     register({ id: 'tab.close', title: 'Закрыть вкладку', category: 'Вкладки', keys: ['Ctrl+W', 'Ctrl+F4'], run: () => { const t = activeTab(); if (t) T().close(t.id); } });
     register({ id: 'tab.reopen', title: 'Открыть заново закрытую вкладку', category: 'Вкладки', keys: ['Ctrl+Shift+T'], run: () => T().reopenClosed() });

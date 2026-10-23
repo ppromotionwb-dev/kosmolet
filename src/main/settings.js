@@ -45,6 +45,7 @@ const DEFAULTS = {
     adblock: true,
     adblockAllow: ['seller.wildberries.ru', 'seller.ozon.ru', 'partner.market.yandex.ru', 'localhost'],
     userAgent: 'chrome', customUA: '',
+    isolateNewTabs: false, // Ctrl+T и «+» открывают изолированную вкладку (свой временный контейнер)
   },
   performance: { discardAfterMin: 30, restoreSession: true },
   downloads: { dir: '', ask: false },
@@ -106,7 +107,10 @@ const ARRAY_VALIDATORS = {
       if (!/^[a-z0-9_-]{1,40}$/i.test(id)) throw new Error('неверный id контейнера: ' + id);
       if (seen.has(id)) throw new Error('повтор id контейнера: ' + id);
       seen.add(id);
-      return Object.assign({}, c, { id, name: String(c.name || id), color: String(c.color || '#7c6cff') });
+      const o = Object.assign({}, c, { id, name: String(c.name || id), color: String(c.color || '#7c6cff') });
+      // temp — временный контейнер изолированной вкладки (удаляется с последней вкладкой); основной — никогда
+      if (o.temp && id !== 'main') o.temp = true; else delete o.temp;
+      return o;
     });
     if (!seen.has('main')) out.unshift(clone(DEFAULTS.containers[0]));
     return out;

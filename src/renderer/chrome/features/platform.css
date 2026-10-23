@@ -46,6 +46,8 @@
 .kp-container[hidden] { display: none; }
 .kp-container:hover { background: color-mix(in srgb, var(--kp-c, var(--k-accent)) 26%, transparent); }
 .kp-cdot { width: 8px; height: 8px; border-radius: 50%; background: var(--kp-c, var(--k-accent)); flex-shrink: 0; }
+/* временный контейнер изолированной вкладки: точка-кольцо — «удалится с последней вкладкой» */
+.kp-container.temp .kp-cdot { background: transparent; box-shadow: inset 0 0 0 2px var(--kp-c, var(--k-accent)); }
 .kp-cname { min-width: 0; }
 #omnibox.focused .kp-container { display: none; }
 

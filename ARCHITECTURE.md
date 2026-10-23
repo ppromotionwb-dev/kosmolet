@@ -240,6 +240,11 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - `ctx.sessions.get(containerId)` → Session (создаёт по требованию). `ctx.sessions.onSession((ses, containerId) => {})` — вызывается для всех существующих и будущих сессий. Здесь фичи вешают блокировщик, расширения, загрузки, разрешения.
 - Core в каждой сессии: протокол `kosmo`, `registerPreloadScript({type:'frame', filePath: <собранный tab-preload>})`, чистый User-Agent (без `Electron/` и `kosmolet/` — обычный Chrome 156 Windows), `Accept-Language: ru-RU,ru;q=0.9,en;q=0.8`.
 - UI-сессия: `session.fromPartition('kosmo-ui')` (в памяти) — только для chrome/panel/overlay.
+- **Изолированные вкладки** (вкладка = свой контейнер, без окон и профилей). Временный контейнер — `{ id: 't…', name: 'Изоляция N', color, temp: true }` в `settings.containers`; сессия `persist:c-<id>` (вход переживает перезапуск, пока жива вкладка). Удаляется с данными через 300 мс после закрытия последней вкладки и при старте, если его вкладки не восстановились. «Оставить» снимает `temp`. Окна и ссылки страницы (`window.open`, target=_blank) остаются в контейнере открывшей вкладки — OAuth и кабинеты работают.
+  - Вход: `Ctrl+Shift+N` (команда `tab.newIsolated`), Shift+клик по «+», меню вкладки/чипа «Новый изолированный», правый клик по ссылке «Открыть в изолированной вкладке», IPC `kosmo:tabs.create {isolated: true}`. Режим `privacy.isolateNewTabs` — так открываются ВСЕ новые вкладки интерфейса (Ctrl+T, «+», без `containerId`/opener); `{isolated: false}` или Ctrl+клик по «+» — обычная.
+  - API: `ctx.platform.containers.{create({name?, color?, temp=true}), openIsolated({url?, index?, active?, temp?, name?}) → {tab, container}, keep(id, name?), sweep(ids?), remove(id)}`. Ядро: `ctx.sessions.exists(id)`, `resolve(id)` (несуществующий → обработчик `setMissingHandler`, platform открывает в новом временном — повтор закрытой вкладки удалённого контейнера не попадает в основной). TabInfo: `containerTemp`.
+  - MCP: `containers_list` (read), `container_create {name?, color?, temporary?}` (full), `tab_open {isolated, containerName, keep}`; `tabs_list` показывает `[id]` контейнера. Для ИИ: один контейнер на кабинет маркетплейса.
+  - Регрессия: `node tools/containers-test.mjs <devPort> <cdpPort> [profile]` (14 проверок: cookies/localStorage, window.open, автоудаление, «Оставить», повтор закрытой, режим, IPC, MCP).
 
 ## 8–10. Overlay, panel, commands (main)
 
@@ -260,9 +265,9 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
                             bg: '#14161c', text: '#e6e6ea' },
                 sites: { /* 'wildberries.ru': { enabled: true, brightness?, contrast?, sepia?, css: '' } */ } },
   search: { engine: 'google' /* google|yandex|ddg|bing */, bangs: [ /* {key, name, url:'...{q}', numericUrl?:'...{q}'} */ ] },
-  containers: [ { id: 'main', name: 'Основной', color: '#7c6cff' } ],
+  containers: [ { id: 'main', name: 'Основной', color: '#7c6cff' } /* + temp: true у временных (изолированные вкладки) */ ],
   privacy: { adblock: true, adblockAllow: ['seller.wildberries.ru','seller.ozon.ru','partner.market.yandex.ru','localhost'],
-             userAgent: 'chrome' /* chrome|custom */, customUA: '' },
+             userAgent: 'chrome' /* chrome|custom */, customUA: '', isolateNewTabs: false },
   performance: { discardAfterMin: 30, restoreSession: true },
   downloads: { dir: '' /* '' = системная «Загрузки» */, ask: false },
   claude: { mcpEnabled: true, mcpPort: 47321, token: '' /* генерируется при первом старте */, access: 'full' /* off|read|full */,

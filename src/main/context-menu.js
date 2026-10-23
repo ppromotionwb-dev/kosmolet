@@ -68,6 +68,10 @@ function createContextMenu(ctx) {
           { label: 'Открыть в новой вкладке', click: () => openTab(link, tab) },
           { label: 'Открыть в новой активной вкладке', click: () => openTab(link, tab, { active: true }) },
           {
+            label: 'Открыть в изолированной вкладке', visible: !!(ctx.platform && ctx.platform.containers),
+            click: () => ctx.platform.containers.openIsolated({ url: link, index: tab ? tab.index + 1 : undefined }),
+          },
+          {
             label: 'Открыть в контейнере',
             submenu: ctx.sessions.containers().map((c) => ({
               label: c.name + (tab && c.id === tab.info.containerId ? ' (текущий)' : ''),

@@ -181,14 +181,17 @@
     function render() {
       const a = K.activeTab();
       const show = !!(a && a.containerId && a.containerId !== 'main');
-      const k = show ? [a.containerId, a.containerName, a.containerColor].join('|') : '';
+      const k = show ? [a.containerId, a.containerName, a.containerColor, a.containerTemp].join('|') : '';
       if (k === key) return;
       key = k;
       chip.hidden = !show;
       if (!show) return;
       chip.style.setProperty('--kp-c', a.containerColor || 'var(--k-accent)');
       name.textContent = a.containerName || a.containerId;
-      chip.title = 'Контейнер «' + (a.containerName || a.containerId) + '»: свои cookies и вход на сайты';
+      chip.classList.toggle('temp', !!a.containerTemp);
+      chip.title = a.containerTemp
+        ? 'Изолированная вкладка «' + (a.containerName || a.containerId) + '»: свои cookies и вход; удалится с последней вкладкой — «Оставить» в меню'
+        : 'Контейнер «' + (a.containerName || a.containerId) + '»: свои cookies и вход на сайты';
     }
     K.on('state', render);
     K.on('active', render);

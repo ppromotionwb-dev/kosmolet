@@ -13,6 +13,7 @@ const INSTRUCTIONS = [
   'click/type/press_key send real (trusted) input events and report navigation or new tabs.',
   'For site data prefer network_requests/network_request (what the page already loaded) or page_fetch (fetch inside the page with its cookies) over scraping HTML.',
   'picked_element returns the element the user pointed at with the picker (Ctrl+Shift+E).',
+  'Containers isolate logins: each has its own cookies, storage and cache. To work in several accounts of one site (e.g. different seller cabinets of one marketplace) at once, use one container per account: tab_open with isolated=true (new container) or container=<id>; containers_list shows them, container_create makes a lasting one. Tabs opened by a page stay in its container.',
   'The user sets the access mode: read = only reading tools, full = everything.',
 ].join('\n');
 
@@ -128,7 +129,7 @@ function createTools(ctx, deps) {
   }
   function tabLine(t) {
     const flags = [];
-    if (t.containerId && t.containerId !== 'main') flags.push('container ' + (t.containerName || t.containerId));
+    if (t.containerId && t.containerId !== 'main') flags.push(`container ${t.containerName || t.containerId} [${t.containerId}]${t.containerTemp ? ' temporary' : ''}`);
     if (t.loading) flags.push('loading');
     if (t.discarded) flags.push('unloaded');
     if (t.pinned) flags.push('pinned');
@@ -214,6 +215,20 @@ function createTools(ctx, deps) {
           const list = ctx.tabs.list();
           const lines = list.map(tabLine);
           return `${list.length} tabs (* = active, ids are stable while the tab lives):\n${lines.join('\n')}`;
+        },
+      },
+      {
+        name: 'containers_list', access: READ,
+        description: 'List containers (separate logins: own cookies, storage, cache) with their open tabs. Example: {}',
+        input: {},
+        annotations: { readOnlyHint: true },
+        async run() {
+          const tabs = ctx.tabs.list();
+          const lines = ctx.sessions.containers().map((c) => {
+            const own = tabs.filter((t) => t.containerId === c.id);
+            return `[${c.id}] ${c.name}${c.id === 'main' ? ' (default)' : ''}${c.temp ? ' (temporary: deleted with its last tab)' : ''} — ${own.length} tab(s)${own.length ? ': ' + own.map((t) => t.id).join(', ') : ''}`;
+          });
+          return `${lines.length} containers:\n${lines.join('\n')}`;
         },
       },
       {
@@ -446,23 +461,55 @@ function createTools(ctx, deps) {
       // ===== действия =====
       {
         name: 'tab_open', access: FULL,
-        description: 'Open a URL (or search text) in a new tab and wait for it to load. container = container id or name for a separate login (cookies). Example: {"url": "https://www.wildberries.ru", "background": false}',
+        description: 'Open a URL (or search text) in a new tab and wait for it to load. container = container id or name for a separate login (cookies); isolated = open in a brand-new empty container (temporary unless keep=true). Example: {"url": "https://www.wildberries.ru", "background": false} or {"url": "https://seller.wildberries.ru", "isolated": true, "containerName": "WB кабинет 2", "keep": true}',
         input: {
           url: z.string().describe('URL or search query'),
           container: z.string().optional().describe('Container id or name (default: main)'),
+          isolated: z.boolean().optional().describe('New empty container just for this tab (no cookies, fresh login). Ignores container'),
+          containerName: z.string().optional().describe('Name for the new container (with isolated)'),
+          keep: z.boolean().optional().describe('With isolated: keep the container after its tabs close (default false = deleted with its data)'),
           background: z.boolean().optional().describe('Open without switching to it (default false)'),
           wait: z.boolean().optional().describe('Wait for load (default true)'),
         },
         async run(args, call) {
           const url = checkUrl(args.url);
-          const containerId = resolveContainer(args.container);
-          const t = call.tab(ctx.tabs.create({ url, containerId, active: !args.background }));
+          let t;
+          let note = '';
+          if (args.isolated) {
+            const C = ctx.platform && ctx.platform.containers;
+            if (!C) throw new Error('containers are not available in this build');
+            const r = C.openIsolated({ url, active: !args.background, temp: !args.keep, name: args.containerName });
+            t = call.tab(r.tab);
+            note = ` in new ${args.keep ? '' : 'temporary '}container "${r.container.name}" [${r.container.id}]`;
+          } else {
+            const containerId = resolveContainer(args.container);
+            t = call.tab(ctx.tabs.create({ url, containerId, active: !args.background }));
+          }
           if (args.wait !== false) { await A.sleep(200); await A.waitLoad(t, 20000); }
           const wc = t.wc;
           const live = wc && !wc.isDestroyed();
           const u = (live && wc.getURL()) || t.info.url || url;
           const title = live ? wc.getTitle() : '';
-          return `Opened tab [${t.id}]${args.background ? ' in background' : ''}: ${readableUrl(u)}${title && title !== u ? ` — "${title}"` : ''}${live && wc.isLoading() ? ' (still loading)' : ''}`;
+          return `Opened tab [${t.id}]${note}${args.background ? ' in background' : ''}: ${readableUrl(u)}${title && title !== u ? ` — "${title}"` : ''}${live && wc.isLoading() ? ' (still loading)' : ''}`;
+        },
+      },
+      {
+        name: 'container_create', access: FULL,
+        description: 'Create a new empty container (separate login) and return its id, e.g. one per marketplace account. Lasting by default; temporary=true deletes it with its last tab. Example: {"name": "Ozon кабинет 2"}',
+        input: {
+          name: z.string().optional().describe('Container name (default: auto)'),
+          color: z.string().optional().describe('Color #rrggbb (default: auto)'),
+          temporary: z.boolean().optional().describe('Delete with its data when its last tab closes (default false)'),
+        },
+        async run(args) {
+          const C = ctx.platform && ctx.platform.containers;
+          if (!C) throw new Error('containers are not available in this build');
+          const name = args.name ? clip(String(args.name).trim(), 40) : '';
+          if (name && ctx.sessions.containers().some((c) => String(c.name).toLowerCase() === name.toLowerCase())) {
+            throw new Error(`container "${name}" already exists — use it via tab_open container`);
+          }
+          const c = C.create({ name, color: args.color, temp: !!args.temporary });
+          return `Created ${c.temp ? 'temporary ' : ''}container "${c.name}" [${c.id}]. Open tabs in it: tab_open {"url": "...", "container": "${c.id}"}`;
         },
       },
       {

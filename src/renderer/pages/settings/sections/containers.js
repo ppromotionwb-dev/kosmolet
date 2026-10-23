@@ -24,6 +24,10 @@
       // без подписи группы: заголовок страницы уже «Контейнеры»
       el.appendChild(ui.group(null, ui.free(listEl), ui.free(h('div.kc-foot', h('span.k-faint', 'Открыть в контейнере — правый клик по ссылке или вкладке, а также меню «⋯» → «Новая вкладка в контейнере».'), addBtn)),
         anchor('контейнеры добавить переименовать цвет удалить очистить данные')));
+      el.appendChild(ui.group('Изолированные вкладки',
+        ui.toggle('Каждая новая вкладка — изолированная', 'privacy.isolateNewTabs', 'Ctrl+T и «+» открывают вкладку в своём временном контейнере: отдельный вход, cookies и кэш без новых окон и профилей. Ссылки и окна, открытые со страницы, остаются в её контейнере.'),
+        anchor('изолированная вкладка временный контейнер отдельный вход кабинет Ctrl+Shift+N')));
+      el.appendChild(ui.note('Изолированная вкладка без этого режима — Ctrl+Shift+N или Shift+клик по «+». Временный контейнер удаляется вместе с данными, когда закрыта его последняя вкладка; чтобы сохранить вход, нажмите «Оставить» (или в меню чипа контейнера в адресной строке).'));
 
       let counts = {};
       let openMenu = null;   // id контейнера с открытой палитрой
@@ -103,7 +107,7 @@
           else if (e.key === 'Escape') { name.value = c.name; name.blur(); }
         });
         const meta = h('span.kc-meta', n ? n + ' ' + U.plural(n, ['вкладка', 'вкладки', 'вкладок']) : 'нет вкладок');
-        const tags = isMain ? h('span.k-badge', 'по умолчанию') : null;
+        const tags = isMain ? h('span.k-badge', 'по умолчанию') : c.temp ? h('span.k-badge', { title: 'Удалится вместе с данными, когда закроется последняя вкладка' }, 'временный') : null;
 
         const actions = h('div.kc-actions');
         const isBusy = busy.has(c.id);
@@ -124,6 +128,11 @@
           const clear = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Удалить cookies, вход на сайты и кэш этого контейнера', disabled: isBusy }, 'Очистить данные…');
           clear.addEventListener('click', () => { confirm = { id: c.id, kind: 'clear' }; openMenu = null; render(); });
           actions.append(tab, clear);
+          if (c.temp) {
+            const keepBtn = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Не удалять контейнер и вход при закрытии вкладок', disabled: isBusy }, 'Оставить');
+            keepBtn.addEventListener('click', () => save(list().map((x) => { if (x.id !== c.id) return x; const o = Object.assign({}, x); delete o.temp; return o; })));
+            actions.appendChild(keepBtn);
+          }
           if (!isMain) {
             const del = h('button.k-btn.k-btn-sm.k-btn-ghost.kc-del', { type: 'button', title: 'Удалить контейнер вместе с его данными', disabled: isBusy }, 'Удалить…');
             del.addEventListener('click', () => { confirm = { id: c.id, kind: 'remove' }; openMenu = null; render(); });

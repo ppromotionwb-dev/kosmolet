@@ -78,6 +78,7 @@ function createSessions(ctx) {
   let preloadPath = null;
   let uiSession = null;
   let permHandler = null;
+  let missingHandler = null;
 
   const rendererRoot = ctx.paths.renderer;
   const uiOverride = ctx.flags.dev && ctx.flags.uiRoot ? path.resolve(ctx.flags.uiRoot) : null;
@@ -249,6 +250,19 @@ function createSessions(ctx) {
     return CONTAINER_ID_RE.test(s) ? s : 'main';
   }
 
+  function exists(id) { return id === 'main' || containers().some((c) => c.id === id); }
+
+  // id контейнера для новой вкладки: существующий — как есть; удалённый — решает обработчик фичи
+  // (platform открывает в новом изолированном), без обработчика — основной.
+  function resolve(containerId) {
+    const id = normalizeId(containerId);
+    if (exists(id)) return id;
+    if (missingHandler) {
+      try { const r = missingHandler(id); if (r && exists(r)) return r; } catch (e) { ctx.log('sessions', 'нет контейнера:', e); }
+    }
+    return 'main';
+  }
+
   function get(containerId) {
     const id = normalizeId(containerId);
     let ses = sessions.get(id);
@@ -299,6 +313,9 @@ function createSessions(ctx) {
     containers,
     container,
     normalizeId,
+    exists,
+    resolve,
+    setMissingHandler(fn) { missingHandler = typeof fn === 'function' ? fn : null; },
     partition: (id) => 'persist:c-' + normalizeId(id),
     all: () => Array.from(sessions, ([id, ses]) => ({ id, session: ses })),
     idOf(ses) { for (const [id, s] of sessions) if (s === ses) return id; return null; },

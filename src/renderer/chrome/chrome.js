@@ -220,7 +220,8 @@
   }
 
   tabbarEl.addEventListener('pointerleave', () => { if (freezeWidth) { freezeWidth = false; layoutTabs(); } });
-  newTabBtn.addEventListener('click', () => newTab());
+  // Shift+клик — изолированная вкладка (свой временный контейнер); Ctrl+клик — обычная, даже в режиме изоляции
+  newTabBtn.addEventListener('click', (e) => newTab(e.shiftKey ? { isolated: true } : e.ctrlKey ? { isolated: false } : undefined));
   tabsEl.addEventListener('dblclick', (e) => { if (e.target === tabsEl) newTab(); });
   tabsEl.addEventListener('wheel', (e) => {
     if (tabsEl.scrollWidth <= tabsEl.clientWidth) return;
