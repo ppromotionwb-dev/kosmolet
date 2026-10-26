@@ -110,7 +110,34 @@ KSettings.section({
     const configRow = ui.row('Файл для --mcp-config', h('div.kcs-inline', configPath, copyConfig),
       'Его использует встроенный терминал: claude --mcp-config <файл>', { stack: true, keywords: 'mcp-config json' });
 
-    el.append(ui.group('Подключение', connectRow, cmdRow, portRow, tokenRow, ui.free(regenWarn), configRow));
+    // Codex (OpenAI): кнопка пишет в ~/.codex/config.toml только таблицу [mcp_servers.kosmolet] (bridge/codex.js)
+    const codexBtn = h('button.k-btn', { type: 'button' }, api.icon('terminal', 14), 'Подключить к Codex');
+    const codexOut = h('pre.kcs-out', { hidden: true });
+    codexBtn.addEventListener('click', async () => {
+      codexBtn.disabled = true;
+      const label = Array.from(codexBtn.childNodes);
+      codexBtn.textContent = '';
+      codexBtn.append(h('span.k-spinner'), 'Подключаю…');
+      try {
+        const r = await api.invoke('kosmo:bridge.connectCodex', {});
+        codexOut.dataset.tone = r.ok ? 'ok' : 'danger';
+        codexOut.textContent = (r.output || '').split(/Bearer [0-9a-f]+/i).join('Bearer <token>');
+      } catch (e) {
+        codexOut.dataset.tone = 'danger';
+        codexOut.textContent = 'Не удалось: ' + errMsg(e);
+      } finally {
+        codexOut.hidden = false;
+        codexBtn.disabled = false;
+        codexBtn.textContent = '';
+        codexBtn.append(...label);
+      }
+    });
+    api.invoke('kosmo:bridge.codexInfo', {}).then((i) => { codexBtn.title = i.found ? 'Codex: ' + i.path : 'Сам codex не найден — для приложения Codex это не важно'; }).catch(() => {});
+    const codexRow = ui.row('Codex', codexBtn,
+      'Добавит сервер kosmolet в ~/.codex/config.toml — общий для приложения Codex, CLI и плагинов. Остальное в файле не трогает', { keywords: 'codex openai подключить mcp config.toml' });
+
+    el.append(ui.group('Подключение', connectRow, codexRow, cmdRow, portRow, tokenRow, ui.free(regenWarn), configRow));
+    codexRow.after(codexOut); // вывод кнопки — сразу под строкой, пока скрыт — места не занимает
     regenWarn.parentElement.classList.add('kcs-warn-holder');
 
     // ---------- «Отправить в Claude» ----------
@@ -141,6 +168,7 @@ KSettings.section({
     el.append(ui.group('Встроенный терминал',
       cwdRow,
       ui.text('Команда claude', 'claude.claudeCommand', { mono: true, placeholder: 'claude', hint: 'Имя или полный путь к Claude Code. Используется и кнопкой «Подключить»' }),
+      ui.text('Команда codex', 'claude.codexCommand', { mono: true, placeholder: 'искать самим', hint: 'Пусто — PATH, потом приложение Codex (%LOCALAPPDATA%\\OpenAI\\Codex\\bin). Или полный путь к codex.exe' }),
       ui.segmented('Оболочка', 'claude.shell', [['powershell', 'PowerShell'], ['cmd', 'cmd'], ['bash', 'Git Bash']], 'В какой оболочке открывается терминал')));
 
     // ---------- журнал ----------

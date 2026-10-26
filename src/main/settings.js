@@ -48,7 +48,7 @@ const DEFAULTS = {
   downloads: { dir: '', ask: false },
   claude: {
     mcpEnabled: true, mcpPort: 47321, token: '', access: 'full',
-    inboxDir: '', terminalCwd: '', claudeCommand: 'claude',
+    inboxDir: '', terminalCwd: '', claudeCommand: 'claude', codexCommand: '',
   },
   // capture: scoped — подробно только на хостах захвата паков и во вкладке «Сеть и API», остальное — лёгкий режим API.
   // Порт удалённой отладки в настройках не хранится: только флаг запуска --cdp-port / --remote-debugging-port.
@@ -141,6 +141,19 @@ const STRING_VALIDATORS = {
       return s;
     }
     if (!/^claude[\w.-]{0,60}$/i.test(s)) throw new Error(`${p}: укажите claude или полный путь к Claude Code`);
+    return s;
+  },
+  // Codex: пусто = искать самим (PATH, потом %LOCALAPPDATA%\OpenAI\Codex\bin\*\codex.exe), имя codex… или полный путь.
+  'claude.codexCommand': (v, p) => {
+    const s = v.trim();
+    if (!s) return '';
+    if (CMD_META_RE.test(s)) throw new Error(`${p}: недопустимые символы в команде`);
+    if (path.isAbsolute(s)) {
+      const st = statOf(s);
+      if (!st || !st.isFile()) throw new Error(`${p}: файл не найден`);
+      return s;
+    }
+    if (!/^codex[\w.-]{0,60}$/i.test(s)) throw new Error(`${p}: укажите codex или полный путь к codex.exe`);
     return s;
   },
   'claude.inboxDir': dirOrEmpty,

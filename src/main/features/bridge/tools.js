@@ -129,7 +129,7 @@ function createTools(ctx, deps) {
   }
 
   // ---------- вызов с журналом ----------
-  async function invoke(d, args) {
+  async function invoke(d, args, meta = {}) {
     const t0 = Date.now();
     const call = {
       tabId: null,
@@ -154,7 +154,7 @@ function createTools(ctx, deps) {
     if (call.tabId != null) { try { ctx.tabs.markClaude(call.tabId); } catch (_) { /* закрыта */ } }
     let tabTitle;
     if (call.tabId != null) { try { const t = ctx.tabs.get(call.tabId); tabTitle = t ? clip(t.info.title || t.info.url || '', 80) : undefined; } catch (_) { tabTitle = undefined; } }
-    activity.add({ tool: d.name, args: call.logArgs, tabId: call.tabId, tabTitle, ok: !err, ms: Date.now() - t0, error: err ? String(err.message || err) : undefined });
+    activity.add({ tool: d.name, args: call.logArgs, tabId: call.tabId, tabTitle, ok: !err, ms: Date.now() - t0, error: err ? String(err.message || err) : undefined, agent: meta.agent });
     return res;
   }
 
@@ -1207,15 +1207,15 @@ function createTools(ctx, deps) {
     return defs;
   }
 
-  // Новый McpServer на запрос (stateless).
-  function buildServer() {
+  // Новый McpServer на запрос (stateless). meta.agent — 'claude' | 'codex' | 'agent' (по User-Agent запроса), для журнала.
+  function buildServer(meta = {}) {
     const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
     const list = build();
     const server = new McpServer({ name: 'kosmolet', title: 'Космолёт', version: ctx.app.getVersion() }, { instructions: INSTRUCTIONS });
     for (const d of list) {
       const config = { description: d.access === FULL ? d.description + ' Needs access mode full.' : d.description, inputSchema: d.input };
       if (d.annotations) config.annotations = d.annotations;
-      server.registerTool(d.name, config, (args) => invoke(d, args));
+      server.registerTool(d.name, config, (args) => invoke(d, args, meta));
     }
     return server;
   }

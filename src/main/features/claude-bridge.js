@@ -5,8 +5,8 @@
 // - журнал действий (claude-activity.json, событие kosmo:bridge.activity) — bridge/activity.js;
 // - пикер «Показать Claude элемент» (Ctrl+Shift+E, контекстное меню) — bridge/picker.js + preload/tab/30-picker.js;
 // - «Отправить в Claude» (Ctrl+Shift+Y, контекстное меню, меню «⋯») — bridge/inbox.js;
-// - подключение Claude Code и gen/claude-mcp.json — bridge/connect.js.
-// API для соседей: ctx.bridge.{toInbox, mcpConfigPath, status, pageFetch, sendPage, lastPicked, activity}.
+// - подключение Claude Code и gen/claude-mcp.json — bridge/connect.js; подключение Codex (~/.codex/config.toml) — bridge/codex.js.
+// API для соседей: ctx.bridge.{toInbox, mcpConfigPath, status, pageFetch, sendPage, lastPicked, activity, codex}.
 // На старте только http.createServer; SDK MCP грузится при первом запросе.
 
 const crypto = require('crypto');
@@ -18,6 +18,7 @@ const { createActions } = require('./bridge/actions');
 const { createTools } = require('./bridge/tools');
 const { createInbox } = require('./bridge/inbox');
 const { createConnect } = require('./bridge/connect');
+const { createCodex } = require('./bridge/codex');
 const { createPicker } = require('./bridge/picker');
 
 const ACCESS = ['off', 'read', 'full'];
@@ -44,9 +45,10 @@ function init(ctx) {
   const tools = createTools(ctx, { actions, activity, picker, getAccess });
   const inbox = createInbox(ctx, { actions, picker, activity });
   const connect = createConnect(ctx, getConfig);
+  const codex = createCodex(ctx, getConfig);
   const server = createServer(ctx, {
     getConfig,
-    buildServer: () => tools.buildServer(),
+    buildServer: (meta) => tools.buildServer(meta),
     onState: () => broadcastStatus(),
   });
 
@@ -67,6 +69,7 @@ function init(ctx) {
       calls: activity.calls,
       portFromFlag: !!ctx.flags.mcpPort,
       configPath: connect.configPath(),
+      codexConfigPath: codex.configFile(),
       inboxDir: inbox.dir(),
       inboxCustom: !!S.peek('claude.inboxDir'),
       desktopDir: desktopDir(),
@@ -111,6 +114,8 @@ function init(ctx) {
     lastPicked: () => picker.last(),
     activity: (limit) => activity.list(limit),
     connectClaudeCode: (o) => connect.connectClaudeCode(o),
+    connectCodex: (o) => codex.connect(o),
+    codex: { find: () => codex.find(), terminalArgs: () => codex.terminalArgs() },
     command: () => connect.command(),
     url: () => connect.url(),
     tools: () => tools.names(),
@@ -140,6 +145,8 @@ function init(ctx) {
     return status();
   });
   handle('kosmo:bridge.connectClaudeCode', (p = {}) => connect.connectClaudeCode({ dryRun: !!(p && p.dryRun) }));
+  handle('kosmo:bridge.connectCodex', (p = {}) => codex.connect({ dryRun: !!(p && p.dryRun) }));
+  handle('kosmo:bridge.codexInfo', () => { const f = codex.find(); return { found: !!f, path: f ? f.path : null, source: f ? f.source : null, configPath: codex.configFile() }; });
   handle('kosmo:bridge.command', () => ({ command: connect.command(), url: connect.url(), configPath: connect.writeConfig() }));
   handle('kosmo:bridge.regenerateToken', () => {
     S.set('claude.token', crypto.randomBytes(24).toString('hex'));

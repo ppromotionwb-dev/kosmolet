@@ -1,7 +1,9 @@
 'use strict';
 // Фича «claude-terminal»: терминал с Claude Code в правой панели (инструмент «Claude», вкладка «Терминал»).
-// - сессии node-pty (ConPTY): профили claude | powershell | cmd | bash; node-pty грузится при первом запуске;
+// - сессии node-pty (ConPTY): профили claude | codex | powershell | cmd | bash; node-pty грузится при первом запуске;
 // - «Claude» = settings.claude.claudeCommand + --mcp-config <ctx.bridge.mcpConfigPath()> в оболочке settings.claude.shell;
+// - «Codex» = codex (ctx.bridge.codex.find()) + `-c mcp_servers.kosmolet.url=…` и bearer_token_env_var; токен — только
+//   в окружении процесса (KOSMOLET_MCP_TOKEN), не в командной строке и не в файлах;
 // - вывод копится и раз в 16 мс уходит ТОЛЬКО в панель (kosmo:term.data {id, data, seq}); кольцевой буфер 256 КБ
 //   на сессию — для восстановления после перезагрузки панели (kosmo:term.replay);
 // - закрытие сессии и выход из приложения убивают всё дерево процессов (taskkill /T /F);
@@ -13,8 +15,10 @@ const os = require('os');
 const path = require('path');
 const { execFile, spawnSync } = require('child_process');
 
-const PROFILES = ['claude', 'powershell', 'cmd', 'bash'];
-const TITLES = { claude: 'Claude', powershell: 'PowerShell', cmd: 'cmd', bash: 'Git Bash' };
+const PROFILES = ['claude', 'codex', 'powershell', 'cmd', 'bash'];
+const AGENTS = ['claude', 'codex'];
+const TITLES = { claude: 'Claude', codex: 'Codex', powershell: 'PowerShell', cmd: 'cmd', bash: 'Git Bash' };
+const { findCodex, TOKEN_ENV } = require('./bridge/codex');
 const SHELLS = ['powershell', 'cmd', 'bash'];
 const BUFFER_LIMIT = 256 * 1024; // символов вывода на сессию
 const FLUSH_MS = 16;
@@ -221,11 +225,29 @@ function init(ctx) {
     return { bin, resolved, args, cfg };
   }
 
+  // Что запускать для Codex. Не нашли — понятная ошибка вместо «не является командой» в оболочке.
+  function codexSpec() {
+    const b = ctx.bridge && ctx.bridge.codex;
+    const found = b ? b.find() : findCodex(S.peek('claude.codexCommand'));
+    if (!found) throw new Error('Codex не найден. Установите приложение Codex или CLI (npm i -g @openai/codex) либо укажите путь в настройках, раздел «Claude» → «Команда codex».');
+    const args = [];
+    const env = {};
+    if (mcpEnabled()) {
+      if (b) { const t = b.terminalArgs(); args.push(...t.args); Object.assign(env, t.env); }
+      else {
+        const port = Number(S.peek('claude.mcpPort')) || 47321;
+        args.push('-c', `mcp_servers.kosmolet.url=http://127.0.0.1:${port}/mcp`, '-c', `mcp_servers.kosmolet.bearer_token_env_var=${TOKEN_ENV}`);
+        env[TOKEN_ENV] = String(S.peek('claude.token') || '');
+      }
+    }
+    return { bin: found.path, resolved: found.path, args, cfg: mcpEnabled() ? 'codex -c' : null, env };
+  }
+
   // Профиль → {file, args, title}. args — массив (node-pty сам экранирует) или строка (командная строка как есть).
   function buildSpawn(profile, opts = {}) {
-    const isClaude = profile === 'claude';
-    const shell = isClaude ? shellSetting() : profile;
-    const c = isClaude ? claudeSpec(shell) : null;
+    const isAgent = AGENTS.includes(profile);
+    const shell = isAgent ? shellSetting() : profile;
+    const c = !isAgent ? null : profile === 'codex' ? codexSpec() : claudeSpec(shell);
     // для проверок: заменить запуск claude своей командой (например, «claude --version»)
     if (c && Array.isArray(opts.claudeArgs)) c.args = opts.claudeArgs.map(String);
     if (!IS_WIN) {
@@ -379,7 +401,7 @@ function init(ctx) {
     const spec = buildSpawn(s.profile, opts);
     const cols = clampInt(opts.cols, 20, 500, s.cols || 100);
     const rows = clampInt(opts.rows, 5, 300, s.rows || 30);
-    const base = { name: 'xterm-256color', cols, rows, cwd: s.cwd, env: makeEnv(), useConpty: true };
+    const base = { name: 'xterm-256color', cols, rows, cwd: s.cwd, env: Object.assign(makeEnv(), (spec.claude && spec.claude.env) || {}), useConpty: true };
     // conpty.dll из node-pty (см. выше); не вышло — системный ConPTY. Git Bash — всегда системный:
     // под новым ConPTY bash из MSYS2 теряет первый символ, набранный после изменения размера.
     let useDll = IS_WIN && conptyDllAvailable() && (opts.conptyDll === true || (opts.conptyDll !== false && spec.shell !== 'bash'));
@@ -627,6 +649,7 @@ function init(ctx) {
     const cwd = effectiveCwd();
     const setting = String(S.peek('claude.terminalCwd') || '');
     const bash = IS_WIN ? gitBashPath() : null;
+    const codex = ctx.bridge && ctx.bridge.codex ? ctx.bridge.codex.find() : findCodex(S.peek('claude.codexCommand'));
     let build = 0;
     const m = /(\d+)\.(\d+)\.(\d+)/.exec(os.release());
     if (m) build = Number(m[3]);
@@ -635,8 +658,9 @@ function init(ctx) {
       cwdSetting: setting, cwdMissing: !!setting && !isDir(setting), desktop: desktopDir(),
       shell, claudeCommand: String(S.peek('claude.claudeCommand') || 'claude'),
       claudeFound: !!c.resolved, claudePath: c.resolved, mcp: !!c.cfg, access: S.peek('claude.access') || 'full',
+      codexFound: !!codex, codexPath: codex ? codex.path : null,
       gitBash: bash,
-      profiles: PROFILES.map((id) => ({ id, title: TITLES[id], available: id !== 'bash' || !!bash || !IS_WIN })),
+      profiles: PROFILES.map((id) => ({ id, title: TITLES[id], available: id === 'codex' ? !!codex : id !== 'bash' || !!bash || !IS_WIN })),
       platform: process.platform, windowsBuild: IS_WIN ? build : 0,
     };
   }

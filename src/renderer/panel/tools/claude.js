@@ -12,6 +12,7 @@
   const FONT = '"Cascadia Code", "Cascadia Mono", Consolas, monospace';
   const PROFILES = [
     { id: 'claude', title: 'Claude', icon: 'claude', hint: 'claude --mcp-config' },
+    { id: 'codex', title: 'Codex', icon: 'terminal', hint: 'codex -c mcp_servers.kosmolet…' },
     { id: 'powershell', title: 'PowerShell', icon: 'terminal' },
     { id: 'cmd', title: 'cmd', icon: 'terminal' },
     { id: 'bash', title: 'Git Bash', icon: 'terminal' }
@@ -230,9 +231,16 @@
       else text = 'Claude Code подключится к Космолёту по MCP: будет видеть вкладки, сеть и консоль и сможет действовать в браузере.';
       const startBtn = h('button.k-btn.k-btn-primary.kc-start', { type: 'button' }, U.icon('claude', 16), 'Запустить Claude');
       startBtn.addEventListener('click', () => start('claude'));
+      // Codex — второй агент: отдельная кнопка, если найден (приложение Codex или CLI)
+      const codexAvail = (i.profiles || []).find((x) => x.id === 'codex');
+      let codexBtn = null;
+      if (codexAvail && codexAvail.available) {
+        codexBtn = h('button.k-btn.kc-start', { type: 'button', title: i.codexPath || '' }, U.icon('terminal', 16), 'Запустить Codex');
+        codexBtn.addEventListener('click', () => start('codex'));
+      }
       const shells = [];
       for (const p of PROFILES) {
-        if (p.id === 'claude') continue;
+        if (p.id === 'claude' || p.id === 'codex') continue;
         const avail = (i.profiles || []).find((x) => x.id === p.id);
         if (shells.length) shells.push(h('span.kc-sep', '·'));
         shells.push(linkBtn(p.title, () => start(p.id), avail && !avail.available, avail && !avail.available ? 'Не найден' : null));
@@ -242,6 +250,7 @@
         h('div.kc-empty-title', 'Claude Code в браузере'),
         h('div.kc-empty-text', text),
         startBtn,
+        codexBtn,
         h('div.kc-cwd', h('span', 'Работает в:'), h('span.kc-cwd-path', { title: i.cwd }, i.cwdDisplay || i.cwd), h('span.kc-sep', '·'), linkBtn('сменить', () => pickCwd())),
         h('div.kc-shells', h('span', 'Или оболочка:'), shells)
       );
@@ -802,7 +811,7 @@
     function logRow(e) {
       const ok = e.ok !== false && !e.error;
       const tool = h('span.kc-tool', { title: e.tool || '' }, toolRu(e.tool));
-      const main = h('div.kc-row-main', tool, e.by === 'user' ? h('span.kc-by', 'вы') : null, h('span.kc-args', brief(e)));
+      const main = h('div.kc-row-main', tool, e.by === 'user' ? h('span.kc-by', 'вы') : e.agent === 'codex' ? h('span.kc-by', { title: 'Действие Codex' }, 'Codex') : null, h('span.kc-args', brief(e)));
       const row = h('div.kc-row' + (ok ? '' : '.err'), { role: 'listitem' },
         h('span.kc-time', fmtTime(e.ts)), main,
         h('span.kc-tab', { title: e.tabId != null ? 'Вкладка #' + e.tabId + (e.tabTitle ? ' — ' + e.tabTitle : '') : '' }, e.tabId != null ? (e.tabTitle || '#' + e.tabId) : ''),

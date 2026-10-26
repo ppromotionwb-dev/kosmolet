@@ -1,6 +1,6 @@
 'use strict';
 // Журнал действий Claude (claude-bridge): последние 500 вызовов → userData/claude-activity.json + событие kosmo:bridge.activity.
-// Запись: {ts, tool, args (обрезанно, без секретов), tabId, ok, ms, error?, by?: 'claude'|'user', note?}.
+// Запись: {ts, tool, args (обрезанно, без секретов), tabId, ok, ms, error?, by?: 'claude'|'user', agent?: 'claude'|'codex'|'agent', note?}.
 
 const LIMIT = 500;
 const SECRET_KEY = /token|password|passwd|secret|authorization|cookie|api[-_]?key|session/i;

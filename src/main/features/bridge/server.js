@@ -12,7 +12,7 @@ const BODY_LIMIT = 2 * 1024 * 1024;
 function sha(s) { return crypto.createHash('sha256').update(String(s), 'utf8').digest(); }
 
 function createServer(ctx, opts) {
-  // opts: { getConfig() → {enabled, port, token}, buildServer() → McpServer, onState(state) }
+  // opts: { getConfig() → {enabled, port, token}, buildServer({agent}) → McpServer, onState(state) }
   let server = null;
   let port = 0;
   let listening = false;
@@ -96,7 +96,10 @@ function createServer(ctx, opts) {
     try { body = raw ? JSON.parse(raw) : undefined; } catch (_) { return rpcError(res, 400, -32700, 'Parse error'); }
     requests++;
     const { StreamableHTTPServerTransport } = loadSdk();
-    const mcp = opts.buildServer();
+    // Какой агент пришёл: Codex подписывается «codex-mcp-client/<версия>» (docs/codex-research.md), Claude Code — «claude…».
+    const ua = String(req.headers['user-agent'] || '');
+    const agent = /codex/i.test(ua) ? 'codex' : /claude/i.test(ua) ? 'claude' : 'agent';
+    const mcp = opts.buildServer({ agent });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
       transport.close().catch(() => {});
