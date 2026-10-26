@@ -111,7 +111,7 @@ function createActions(ctx) {
 
   // ---------- выполнение кода в изолированном мире ----------
   // Основной путь — именованный изолированный мир через CDP (Page.createIsolatedWorld + Runtime.evaluate):
-  // webContents.executeJavaScriptInIsolatedWorld в Electron ждёт did-stop-loading, а тяжёлые сайты (WB)
+  // webContents.executeJavaScriptInIsolatedWorld в Electron ждёт did-stop-loading, а тяжёлые сайты
   // «грузятся» десятки секунд — инструменты висели бы. Мир один на документ (Chromium переиспользует его
   // по имени), поэтому ref-ы живут между вызовами. Без ctx.cdp — запасной путь: мир WORLD через Electron.
   const worlds = new Map(); // `${tabId}:${name}` → { wc, ctxId }
@@ -323,7 +323,7 @@ function createActions(ctx) {
     let img = null;
     let note = '';
     // Видимая область: сначала готовый кадр (capturePage — мгновенно); CDP ждёт новый кадр и на занятой
-    // странице (WB после прокрутки) может висеть секундами. capturePage падает на только что показанном
+    // странице (тяжёлый магазин после прокрутки) может висеть секундами. capturePage падает на только что показанном
     // виде — тогда CDP.
     if (!o.fullPage && !background) {
       try { img = await withTimeout(wc.capturePage(), 3000, 'capturePage timeout'); } catch (_) { img = null; }

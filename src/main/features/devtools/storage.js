@@ -194,7 +194,7 @@ function createStorage(ctx) {
     const t = tabCtx(p.tabId);
     if (!t.tab.wc || t.tab.wc.isDestroyed()) throw new Error('вкладка выгружена — откройте её');
     if (!t.web && !(t.u && t.u.protocol === 'file:')) return { unsupported: true, origin: '', items: [] };
-    // Через CDP: executeJavaScriptInIsolatedWorld ждёт конца загрузки страницы (на WB — десятки секунд).
+    // Через CDP: executeJavaScriptInIsolatedWorld ждёт конца загрузки страницы (на тяжёлых сайтах — десятки секунд).
     if (ctx.cdp && typeof ctx.cdp.evalInWorld === 'function') {
       try { return await ctx.cdp.evalInWorld(t.tab.id, code, { world: 'kosmolet-storage', timeoutMs: 15000 }); } catch (e) {
         if (!/отладчик|debugger|attach|выгружена|не найдена/i.test(String(e && e.message))) throw e;

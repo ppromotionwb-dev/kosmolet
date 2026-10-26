@@ -1,4 +1,5 @@
 // Владелец: platform. Раздел «Контейнеры»: добавить, переименовать, цвет, очистить данные, удалить.
+// «Данные…» — метаданные контейнера (scope: пак, поля по схеме, доступ агента, защита) — панель packs (container-scope.js).
 'use strict';
 (function () {
   const U = window.KUI;
@@ -34,6 +35,18 @@
       let confirm = null;    // {id, kind: 'clear'|'remove'}
       const busy = new Set();
       let editing = null;    // id, чьё имя сейчас редактируется (не перерисовывать поле)
+      let scopeOpen = null;  // id с открытой панелью «Данные контейнера»
+      let scopes = {};       // id → scope (kosmo:scopes.list)
+      const ACCESS_RU = { off: 'агенту закрыт', read: 'агент: чтение', ops: 'агент: операции', full: '' };
+      function loadScopes() {
+        return api.invoke('kosmo:scopes.list', {}).then((list) => {
+          const next = {};
+          for (const x of list || []) next[x.containerId] = x;
+          const changed = JSON.stringify(next) !== JSON.stringify(scopes);
+          scopes = next;
+          if (changed) render();
+        }).catch(() => {});
+      }
 
       function list() { const v = api.get('containers'); return Array.isArray(v) && v.length ? v : [{ id: 'main', name: 'Основной', color: '#7c6cff' }]; }
 
@@ -108,6 +121,11 @@
         });
         const meta = h('span.kc-meta', n ? n + ' ' + U.plural(n, ['вкладка', 'вкладки', 'вкладок']) : 'нет вкладок');
         const tags = isMain ? h('span.k-badge', 'по умолчанию') : c.temp ? h('span.k-badge', { title: 'Удалится вместе с данными, когда закроется последняя вкладка' }, 'временный') : null;
+        const sc = scopes[c.id];
+        const scTags = [];
+        if (sc && sc.chip) scTags.push(h('span.kc-scope', { title: 'Чип в адресной строке' }, h('span.kc-smark', { style: { '--kc': c.color } }, sc.chip.mark), sc.chip.label + (sc.chip.account ? ' · ' + sc.chip.account : '')));
+        if (sc && sc.protect) scTags.push(h('span.k-badge', { title: 'Агент пишет только через операции, секреты скрыты' }, 'защищён'));
+        if (sc && ACCESS_RU[sc.agentAccess]) scTags.push(h('span.k-badge', ACCESS_RU[sc.agentAccess]));
 
         const actions = h('div.kc-actions');
         const isBusy = busy.has(c.id);
@@ -125,6 +143,9 @@
           // действия подписаны словами: значки «+», печенька и корзина без подписей были непонятны
           const tab = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Открыть новую вкладку в этом контейнере', disabled: isBusy }, U.icon('plus', 14), 'Новая вкладка');
           tab.addEventListener('click', () => api.invoke('kosmo:containers.newTab', { id: c.id }).catch((e) => api.toast(clean(e), { tone: 'danger' })));
+          const data = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Пак, поля и правила контейнера, доступ агента', 'aria-expanded': scopeOpen === c.id ? 'true' : 'false', disabled: isBusy || !window.KContainerScope }, 'Данные…');
+          data.addEventListener('click', () => { scopeOpen = scopeOpen === c.id ? null : c.id; openMenu = null; confirm = null; render(); });
+          actions.appendChild(data);
           const clear = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Удалить cookies, вход на сайты и кэш этого контейнера', disabled: isBusy }, 'Очистить данные…');
           clear.addEventListener('click', () => { confirm = { id: c.id, kind: 'clear' }; openMenu = null; render(); });
           actions.append(tab, clear);
@@ -142,8 +163,11 @@
             actions.appendChild(h('span.k-btn.k-btn-sm.k-btn-ghost.kc-del-gap', { 'aria-hidden': 'true' }, 'Удалить…'));
           }
         }
-        const top = h('div.kc-row' + (isBusy ? '.busy' : ''), { dataset: { id: c.id } }, color, h('div.kc-main', name, h('div.kc-sub', meta, tags)), actions);
-        return h('div.kc-item', top, openMenu === c.id ? swatches(c) : null);
+        const top = h('div.kc-row' + (isBusy ? '.busy' : ''), { dataset: { id: c.id } }, color, h('div.kc-main', name, h('div.kc-sub', meta, tags, scTags)), actions);
+        const scopeEl = scopeOpen === c.id && window.KContainerScope
+          ? window.KContainerScope.panel(c, api, { onClose: () => { scopeOpen = null; render(); }, onSaved: () => { loadScopes(); } })
+          : null;
+        return h('div.kc-item', top, openMenu === c.id ? swatches(c) : null, scopeEl);
       }
 
       let renderTimer = 0;
@@ -152,6 +176,8 @@
         renderTimer = setTimeout(() => {
           renderTimer = 0;
           if (editing && document.activeElement && document.activeElement.classList.contains('kc-name')) return;
+          // открытую форму данных не перерисовываем, пока в ней фокус (печатают)
+          if (scopeOpen && document.activeElement && document.activeElement.closest && document.activeElement.closest('.kcs')) return;
           U.clear(listEl);
           for (const c of list()) listEl.appendChild(row(c));
         }, 0);
@@ -165,7 +191,9 @@
         if (changed) render();
       }
 
-      ui.watch('containers', () => render());
+      ui.watch('containers', () => { render(); loadScopes(); });
+      U.on('kosmo:scopes.changed', () => loadScopes());
+      U.on('kosmo:packs.changed', () => loadScopes());
       U.on('kosmo:tabs.state', (p) => recount(p && p.tabs));
       api.invoke('kosmo:tabs.list', {}).then((p) => recount(p && p.tabs)).catch(() => {});
       render();

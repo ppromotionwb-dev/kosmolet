@@ -340,7 +340,7 @@ function init(ctx) {
       }
     }
     // тело ответа — лениво и с ограничением частоты
-    // JSON бывает и с text/plain (WB) — тело проверяется после чтения
+    // JSON бывает и с text/plain (у некоторых магазинов) — тело проверяется после чтения
     const maybeJson = isJson || /^text\/plain/i.test(e.mime || '');
     if (maybeJson && (e.size || 0) <= BODY_MAX && (ep.resN < BODY_SAMPLES || t - (ep.resAt || 0) > BODY_EVERY)) queueBody(site, key, tabId, e.id);
 

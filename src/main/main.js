@@ -7,7 +7,8 @@ const electron = require('electron');
 const { app, protocol } = electron;
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const FEATURES = ['platform', 'themes', 'cdp-hub', 'devtools', 'site-intel', 'ux-chrome', 'claude-bridge', 'claude-terminal', 'tools-pack'];
+// packs — первым: остальные фичи читают вклады паков (умолчания сайтов, хосты захвата, scope контейнеров).
+const FEATURES = ['packs', 'platform', 'themes', 'cdp-hub', 'devtools', 'site-intel', 'ux-chrome', 'claude-bridge', 'claude-terminal', 'tools-pack'];
 const URL_ARG_RE = /^(https?|kosmo|file|about|view-source):/i;
 
 // ---------- флаги ----------
@@ -15,7 +16,7 @@ const URL_ARG_RE = /^(https?|kosmo|file|about|view-source):/i;
 function parseFlags(argv) {
   const flags = {
     dev: false, profile: null, devPort: 47399, cdpPort: null, mcpPort: null, noRestore: false,
-    open: [], selftest: false, uiRoot: null, offscreen: false, raw: {},
+    open: [], selftest: false, uiRoot: null, offscreen: false, packDev: [], raw: {},
   };
   for (const a of argv) {
     if (typeof a !== 'string') continue;
@@ -28,7 +29,8 @@ function parseFlags(argv) {
         case 'dev': flags.dev = true; break;
         case 'profile': if (typeof val === 'string' && /^[\w.-]{1,64}$/.test(val)) flags.profile = val; break;
         case 'dev-port': flags.devPort = Number(val) || flags.devPort; break;
-        case 'cdp-port': flags.cdpPort = Number(val) || null; break;
+        case 'cdp-port': case 'remote-debugging-port': flags.cdpPort = Number(val) || null; break;
+        case 'pack-dev': if (typeof val === 'string' && val) flags.packDev.push(val); break;
         case 'mcp-port': flags.mcpPort = Number(val) || null; break;
         case 'no-restore': flags.noRestore = true; break;
         case 'open': if (typeof val === 'string' && val) flags.open.push(val); break;
@@ -70,17 +72,10 @@ protocol.registerSchemesAsPrivileged([{
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: false, stream: true, codeCache: true },
 }]);
 
-// Remote debugging: в dev — всегда (порт из флагов), иначе — по настройке devtools.remoteDebugging.
-(function remoteDebugging() {
-  let port = flags.cdpPort;
-  if (!port) {
-    try {
-      const s = JSON.parse(fs.readFileSync(path.join(USER_DATA, 'settings.json'), 'utf8'));
-      if (s && s.devtools && s.devtools.remoteDebugging) port = Number(s.devtools.remoteDebuggingPort) || 9222;
-    } catch (_) { /* настроек ещё нет */ }
-  }
-  if (port) app.commandLine.appendSwitch('remote-debugging-port', String(port));
-})();
+// Remote debugging — ТОЛЬКО флагом запуска (--cdp-port=<n> или --remote-debugging-port=<n>; в dev порт есть всегда).
+// Из settings.json порт не читается: файл профиля может поменять любая программа пользователя, а открытый CDP-порт —
+// это полный доступ к вкладкам и cookies без аутентификации (решение консилиума, Этап 0).
+if (flags.cdpPort) app.commandLine.appendSwitch('remote-debugging-port', String(flags.cdpPort));
 
 // В dev окно показывается без фокуса и часто перекрыто другими окнами: без этого Chromium считает
 // вкладки скрытыми (occlusion), не рисует их и скриншоты выходят пустыми.

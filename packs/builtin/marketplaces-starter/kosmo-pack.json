@@ -1,0 +1,53 @@
+{
+  "id": "kosmolet.marketplaces-starter",
+  "name": "Маркетплейсы: старт",
+  "version": "1.0.0",
+  "description": "Бэнги и закладки маркетплейсов, исключения блокировщика для кабинетов продавца, быстрая тёмная тема и сниппеты для артикулов. Без внутренних API.",
+  "engine": { "api": 1 },
+  "global": true,
+  "permissions": {
+    "hosts": [
+      "wildberries.ru",
+      "ozon.ru",
+      "market.yandex.ru",
+      "avito.ru",
+      "pult-agenta.pult-agenta.workers.dev"
+    ],
+    "capabilities": ["snippets", "capture"],
+    "readClaims": []
+  },
+  "contributes": {
+    "siteDefaults": {
+      "bangs": [
+        { "key": "wb", "name": "Wildberries", "short": "WB", "chip": true,
+          "url": "https://www.wildberries.ru/catalog/0/search.aspx?search={q}",
+          "numericUrl": "https://www.wildberries.ru/catalog/{q}/detail.aspx" },
+        { "key": "oz", "name": "Ozon", "short": "Ozon", "chip": true,
+          "url": "https://www.ozon.ru/search/?text={q}",
+          "numericUrl": "https://www.ozon.ru/product/{q}/" },
+        { "key": "ym", "name": "Яндекс Маркет", "short": "Маркет", "chip": true,
+          "url": "https://market.yandex.ru/search?text={q}" },
+        { "key": "av", "name": "Авито", "short": "Авито", "chip": true,
+          "url": "https://www.avito.ru/rossiya?q={q}" }
+      ],
+      "bookmarks": [
+        { "title": "WB Партнёры", "url": "https://seller.wildberries.ru/" },
+        { "title": "Ozon Seller", "url": "https://seller.ozon.ru/" },
+        { "title": "Яндекс Маркет", "url": "https://partner.market.yandex.ru/" },
+        { "title": "Авито", "url": "https://www.avito.ru/profile" },
+        { "title": "Пульт агента", "url": "https://pult-agenta.pult-agenta.workers.dev/" }
+      ],
+      "adblockAllow": ["seller.wildberries.ru", "seller.ozon.ru", "partner.market.yandex.ru"],
+      "siteThemes": {
+        "wildberries.ru": { "enabled": true, "engine": "filter" }
+      },
+      "capture": ["seller.wildberries.ru", "seller.ozon.ru", "partner.market.yandex.ru"]
+    },
+    "snippets": [
+      { "file": "snippets/wb-nm-ids.js", "run": "manual", "match": ["*.wildberries.ru/*"],
+        "name": "WB: артикулы на странице", "desc": "nmId из ссылок /catalog/<id>/detail.aspx, с количеством" },
+      { "file": "snippets/ozon-sku.js", "run": "manual", "match": ["*.ozon.ru/*"],
+        "name": "Ozon: SKU на странице", "desc": "SKU из ссылок /product/…-<id>/, с количеством" }
+    ]
+  }
+}

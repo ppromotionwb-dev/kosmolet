@@ -70,7 +70,10 @@ function createTabs(ctx) {
 
   function containerInfo(id) {
     const c = ctx.sessions.container(id);
-    return { containerColor: c.color, containerName: c.name, containerTemp: !!c.temp };
+    // containerChip — чип scope (марка, «поле · поле», аккаунт) из ctx.scopes; null — обычный чип контейнера
+    let chip = null;
+    try { chip = ctx.scopes ? ctx.scopes.chip(id) : null; } catch (_) { chip = null; }
+    return { containerColor: c.color, containerName: c.name, containerTemp: !!c.temp, containerChip: chip };
   }
 
   function makeInfo(id, containerId, url, o) {
@@ -930,6 +933,10 @@ function createTabs(ctx) {
       scheduleState();
     }
   });
+  // scope контейнера или пак его схемы изменились — обновить чип у вкладок
+  const refreshChips = () => { for (const t of tabs) Object.assign(t.info, containerInfo(t.info.containerId)); scheduleState(); };
+  ctx.bus.on('scopes:changed', refreshChips);
+  ctx.bus.on('packs:changed', refreshChips);
 
   return {
     list, get, active, fromWebContents, create, close, closeMany, activate, activateOffset, activateIndex,

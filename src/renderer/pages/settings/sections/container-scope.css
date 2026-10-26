@@ -1,0 +1,24 @@
+/* Владелец: packs. Панель «Данные контейнера». */
+.kcs { margin: 0 0 12px 38px; padding: 12px 14px; border-radius: var(--k-radius); background: var(--k-bg-sunken); border: 1px solid var(--k-border); }
+.kcs-body { display: flex; flex-direction: column; gap: 12px; }
+.kcs-section { display: flex; flex-direction: column; gap: 10px; }
+.kcs-section[hidden] { display: none; }
+.kcs-sub { color: var(--k-text-faint); font-size: var(--k-fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+.kcs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; }
+.kcs-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.kcs-field.inline { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
+.kcs-field.inline .kcs-fhint { flex-basis: 100%; }
+.kcs-field.grow { flex: 1; }
+.kcs-field .k-input, .kcs-field .k-select { width: 100%; }
+.kcs-field.bad .k-input, .kcs-field.bad .k-select { border-color: var(--k-danger); }
+.kcs-flabel { color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kcs-req { color: var(--k-accent-text); }
+.kcs-fhint { color: var(--k-text-faint); font-size: var(--k-fs-xs); line-height: 1.4; }
+.kcs-note { font-size: var(--k-fs-sm); grid-column: 1 / -1; }
+.kcs-row2 { flex-direction: row; gap: 14px; }
+.kcs-mark { width: 64px !important; text-align: center; text-transform: uppercase; }
+.kcs-err { color: var(--k-danger); font-size: var(--k-fs-sm); }
+.kcs-err[hidden] { display: none; }
+.kcs-warn { padding: 6px 10px; border-radius: var(--k-radius-sm); background: var(--k-warn-soft); color: var(--k-text); font-size: var(--k-fs-sm); }
+.kcs-foot { display: flex; align-items: center; gap: 6px; }
+.kcs-loading { font-size: var(--k-fs-sm); }

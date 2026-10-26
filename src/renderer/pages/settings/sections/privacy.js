@@ -84,9 +84,26 @@
       allowInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addAllow(); } });
       allowInput.addEventListener('input', () => { allowErr.hidden = true; });
       ui.watch('privacy.adblockAllow', renderAllow);
+      // исключения паков: нижний слой; «Выключить» скрывает исключение пака (блокировка на сайте включится)
+      const packAllowBox = h('div.kpv-allow');
+      function loadPackAllow() {
+        return api.invoke('kosmo:packs.layer', { type: 'adblockAllow' }).then((r) => {
+          const items = (r && r.items) || [];
+          U.clear(packAllowBox);
+          packAllowBox.hidden = !items.length;
+          for (const it of items) {
+            const b = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: it.hidden ? 'Снова не блокировать рекламу на сайте' : 'Блокировать рекламу и здесь (исключение пака выключится)' }, it.hidden ? 'Вернуть' : 'Выключить');
+            b.addEventListener('click', () => api.invoke('kosmo:packs.hide', { type: 'adblockAllow', key: it.key, hidden: !it.hidden }).then(loadPackAllow).catch((e) => api.toast(clean(e), { tone: 'danger' })));
+            packAllowBox.appendChild(h('div.kpv-chip.kpv-pack' + (it.hidden ? '.off' : ''), { title: 'Исключение из пака «' + it.packName + '»' }, h('span.kpv-chip-text', it.key), h('span.kpv-chip-src', 'пак'), b));
+          }
+        }).catch(() => {});
+      }
+      U.on('kosmo:packs.changed', loadPackAllow);
+      loadPackAllow();
       el.appendChild(ui.group('Исключения',
-        ui.free(h('p.kpv-hint', 'Сайты из списка не фильтруются вовсе — для кабинетов маркетплейсов и своих проектов. Поддомены тоже: «ozon.ru» покрывает seller.ozon.ru. Быстрее всего — щитом в адресной строке.')),
+        ui.free(h('p.kpv-hint', 'Сайты из списка не фильтруются вовсе — для рабочих кабинетов и своих проектов. Поддомены тоже: «example.com» покрывает shop.example.com. Быстрее всего — щитом в адресной строке. Исключения с пометкой «пак» добавили паки: их можно выключить, но не удалить.')),
         ui.free(allowList),
+        ui.free(packAllowBox),
         ui.free(h('div.kpv-allow-add', allowInput, allowAdd), allowErr),
         anchor('исключения белый список сайты без блокировки кабинеты маркетплейсов localhost')));
 

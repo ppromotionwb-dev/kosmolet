@@ -1,4 +1,6 @@
-// Прогон сценария интеграции ядра: node scenario.mjs [devPort] [cdpPort]
+// Прогон сценария интеграции ядра: node tools/smoke.mjs [devPort] [cdpPort]
+// Первым делом — чистота ядра (tools/purity-check.mjs): домены сторонних сайтов в src/ и маркеры клиентов.
+import { check as purityCheck } from './purity-check.mjs';
 const DEV = Number(process.argv[2] || 47430);
 const CDP = Number(process.argv[3] || 9343);
 const results = [];
@@ -44,6 +46,10 @@ const until = async (code, ms = 8000) => { const t0 = Date.now(); while (Date.no
 const chrome = await cdpSession('kosmo://ui/chrome/');
 const tabsNow = () => ev('return { ids: ctx.tabs.list().map(t=>t.id), a: ctx.tabs.activeId, urls: ctx.tabs.list().map(t=>t.url) }');
 
+await check('чистота ядра (purity-check)', () => {
+  const r = purityCheck();
+  return r.problems.length ? fail(r.problems.slice(0, 10).map((p) => `${p.file}:${p.line} ${p.rule} «${p.what}»`)) : { files: r.scanned, markers: r.markers };
+});
 await check('health/featureErrors', async () => { const h = await (await fetch(`http://127.0.0.1:${DEV}/health`)).json(); return h.ok && h.featureErrors.length === 0 ? true : fail(h); });
 await check('старт: замеры', () => ev("return ctx.logs.filter(l=>/через \\d+ мс/.test(l.line)).map(l=>l.line.replace(/ от запуска процесса.*/, ''))"));
 await check('chrome: высота и раскладка', async () => {

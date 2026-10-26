@@ -2,7 +2,8 @@
 // tools-pack: выполнение пользовательского JS во вкладке (сниппеты и служебные скрипты рентгена).
 // Код оборачивается в async-функцию (работают await и return; одиночное выражение возвращается само),
 // результат сериализуется в самой странице (DOM-узлы, Map/Set, циклы, большие массивы), console.* перехватывается.
-// Миры: 'page' — главный мир страницы (её переменные), 'isolated' — свой изолированный мир (DOM общий, JS отдельный).
+// Миры: 'page' — главный мир страницы (её переменные), 'isolated' — свой изолированный мир (DOM общий, JS отдельный);
+// opts.worldName — имя изолированного мира CDP (сниппеты паков: kosmolet-pack-<id>).
 
 const vm = require('vm');
 
@@ -209,7 +210,7 @@ async function exec(tab, code, o) {
   const cdp = o.cdp !== false && getCdp && getCdp();
   if (cdp && typeof cdp.evalInWorld === 'function') {
     try {
-      return await cdp.evalInWorld(tab.id, code, { world: o.world === 'page' ? 'page' : 'kosmolet-snippet', userGesture: !!o.userGesture, timeoutMs: o.timeoutMs, timeoutText: o.timeoutText });
+      return await cdp.evalInWorld(tab.id, code, { world: o.world === 'page' ? 'page' : (o.worldName || 'kosmolet-snippet'), userGesture: !!o.userGesture, timeoutMs: o.timeoutMs, timeoutText: o.timeoutText });
     } catch (e) {
       if (!/отладчик|debugger|attach|выгружена|не найдена|нет основного фрейма/i.test(String(e && e.message))) throw e;
     }
@@ -236,7 +237,7 @@ async function runInTab(tab, code, opts = {}) {
   let r;
   try {
     r = await exec(tab, script, {
-      world, url: FILE, userGesture: opts.userGesture !== false, timeoutMs: opts.timeoutMs || 60000, cdp: opts.cdp,
+      world, worldName: opts.worldName, url: FILE, userGesture: opts.userGesture !== false, timeoutMs: opts.timeoutMs || 60000, cdp: opts.cdp,
       timeoutText: opts.timeoutMs ? `нет ответа за ${Math.round(opts.timeoutMs / 1000)} с — код продолжает работать на странице` : 'нет ответа за 60 с — код продолжает работать на странице',
     });
   } catch (e) {

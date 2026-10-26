@@ -5,7 +5,8 @@
 2. **Удобен Claude** — встроенный MCP-сервер (Claude видит и управляет вкладками через код страниц), терминал с Claude прямо в браузере, «Отправить в Claude».
 3. **Расширенные DevTools** — встроенный Chrome DevTools в боковой панели + свой API-сниффер (JSON, copy as fetch/curl/PowerShell, повтор запроса), хранилище/cookies, эмуляция устройств и сети, сниппеты, SEO/тех-рентген.
 4. **Оформление** — темы интерфейса + тёмная тема для ЛЮБОГО сайта (движок Dark Reader), свой CSS на сайт.
-5. Нужное для работы: поиск с «бэнгами» (`wb`, `oz`, `ym`…), маркетплейсы на быстрых кнопках, контейнеры (разные кабинеты в разных изолированных сессиях одновременно), расширения Chrome (из Chrome Web Store), загрузки.
+5. Нужное для работы: поиск с «бэнгами», контейнеры (разные кабинеты в разных изолированных сессиях одновременно), расширения Chrome (из Chrome Web Store), загрузки.
+6. **Платформа.** В ядре нет ничего про конкретные сайты: всё сайтовое (бэнги магазинов, закладки, исключения блокировщика, темы сайтов, сниппеты, а дальше — операции над API) живёт в **паках** (§16). Встроенный стартовый пак `packs/builtin/marketplaces-starter/` приносит то, что раньше было в ядре; агентские сборки — наборы паков в закрытых репозиториях.
 
 > **Фактическое API ядра** (точные сигнатуры KChrome/KOverlay/KPanel/KSettings, payload'ы всех каналов IPC, отклонения от этого документа и подводные камни) — в [docs/core-reports.md](docs/core-reports.md). При расхождении верно то, что там и в коде.
 
@@ -26,12 +27,16 @@ KOSMOLET/
     dev.mjs                    — core: CLI к dev-серверу (eval/shot/quit/health)
     start-dev.ps1              — core: запуск dev-экземпляра с профилем и портами
     mcp-call.mjs               — claude-bridge: CLI-клиент MCP для проверок
-    smoke.mjs                  — core: регрессия ядра (27 проверок через CDP и dev-сервер)
+    smoke.mjs                  — core: регрессия ядра (28 проверок через CDP и dev-сервер; первая — purity-check)
+    purity-check.mjs           — core: чистота ядра (домены сторонних сайтов в src/, маркеры клиентов), §16.8
+    install-hooks.mjs          — core: ставит git pre-commit с purity-check --staged
+    packs-test.mjs             — packs: регрессия платформы паков (29 проверок)
     make-icon.js, make-shortcut.ps1 — tools-pack: сборка icon.ico/png и ярлыка
     (подпапки фич: features/ux/, bridge/, devtools/, platform/, tools-pack/ — см. Приложение)
   src/
     main/
       main.js                  — core: bootstrap, флаги, порядок init модулей
+      features/packs.js (+ packs/manifest.js, perms.js, scopes.js) — packs: платформа паков и scope контейнеров (§16)
       ctx.js                   — core: создание ctx (см. §3)
       store.js                 — core: JSON-хранилища с атомарной записью
       settings.js              — core: схема настроек, дефолты, миграции
@@ -89,18 +94,22 @@ KOSMOLET/
         extensions/            — platform
 ```
 
+Встроенные паки — вне `src/`: `packs/builtin/<папка>/` (сейчас `marketplaces-starter`).
+
 **Правило совместной работы.** Фича-агент пишет ТОЛЬКО свои файлы. Если нужна правка в файлах core — минимальная, аддитивная, перед правкой перечитать файл, в отчёте перечислить. Чужие фича-файлы не трогать.
 
 ---
 
 ## 2. Запуск, флаги, dev-режим
 
-- `npm start` → обычный запуск. Профиль: `%APPDATA%/Kosmolet` (userData).
+- `npm start` → обычный запуск. Профиль: `%APPDATA%/Kosmolet` (userData) — **рабочий профиль владельца**.
+- **Правило двух профилей (Этап 0).** Агент правит ядро и проверяет правки ТОЛЬКО с `--profile` (`npm run dev` = `--dev --profile=dev`, `tools/start-dev.ps1 -Profile <имя>`): профили лежат в `<проект>/.profiles/<имя>`, рабочий `%APPDATA%/Kosmolet` (в нём идут прогоны и живут входы в кабинеты) агент не запускает и не трогает. Завершать — только свой экземпляр.
 - Флаги командной строки (парсит core, доступны в `ctx.flags`):
   - `--dev` — dev-режим: включает dev-сервер и remote debugging.
   - `--profile=<name>` — userData = `<project>/.profiles/<name>` (для параллельных тестовых экземпляров; single-instance lock — на userData).
   - `--dev-port=<n>` (по умолчанию 47399) — dev-сервер.
-  - `--cdp-port=<n>` (по умолчанию 9333 в dev) — `remote-debugging-port`.
+  - `--cdp-port=<n>` или `--remote-debugging-port=<n>` (в dev по умолчанию 9333) — порт удалённой отладки. **Только флагом**: из `settings.json` порт больше не читается (раньше `devtools.remoteDebugging` открывал CDP без пароля любому, кто может править профиль). В настройках — только подсказка, как включить флагом.
+  - `--pack-dev=<папка>` (можно несколько) — связанная папка пака для разработки (§16.3).
   - `--mcp-port=<n>` — переопределяет `settings.claude.mcpPort` (не сохраняется).
   - `--no-restore` — не восстанавливать сессию вкладок.
   - `--open=<url>` — открыть URL вкладкой (можно несколько; адрес без флага тоже открывается — так его передаёт Windows).
@@ -267,21 +276,22 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
                 defaults: { engine: 'dynamic' /* dynamic|filter */, brightness: 100, contrast: 100, sepia: 0, grayscale: 0,
                             bg: '#14161c', text: '#e6e6ea' },
                 sites: { /* 'wildberries.ru': { enabled: true, brightness?, contrast?, sepia?, css: '' } */ } },
-  search: { engine: 'google' /* google|yandex|ddg|bing */, bangs: [ /* {key, name, url:'...{q}', numericUrl?:'...{q}'} */ ] },
+  search: { engine: 'google' /* google|yandex|ddg|bing */, bangs: [ /* {key, name, url:'...{q}', numericUrl?, short?, chip?} — свои и общие ядра; бэнги паков — слоем ниже */ ] },
   containers: [ { id: 'main', name: 'Основной', color: '#7c6cff' } /* + temp: true у временных (изолированные вкладки) */ ],
-  privacy: { adblock: true, adblockAllow: ['seller.wildberries.ru','seller.ozon.ru','partner.market.yandex.ru','localhost'],
+  privacy: { adblock: true, adblockAllow: ['localhost'] /* + исключения паков слоем ниже */,
              userAgent: 'chrome' /* chrome|custom */, customUA: '', isolateNewTabs: false },
   performance: { discardAfterMin: 30, restoreSession: true },
   downloads: { dir: '' /* '' = системная «Загрузки» */, ask: false },
   claude: { mcpEnabled: true, mcpPort: 47321, token: '' /* генерируется при первом старте */, access: 'full' /* off|read|full */,
             inboxDir: '' /* '' = Документы/Космолёт/claude-inbox */, terminalCwd: '' /* '' = Рабочий стол */, claudeCommand: 'claude' },
-  devtools: { capture: 'api' /* off|api|all */, maxEntries: 1500, remoteDebugging: false, remoteDebuggingPort: 9222 },
+  devtools: { capture: 'scoped' /* off|scoped|api|all */, maxEntries: 1500 },   // порта отладки здесь нет — только флаг
+  packs: { devFolders: [] /* связанные папки */, hidden: { bangs: [], adblockAllow: [], siteThemes: [] } /* скрытые вклады паков */ },
   sitePermissions: { /* 'origin': { notifications: 'allow'|'deny', ... } */ }
 }
 ```
-Фича может добавлять ключи только в своей ветке (новые ветки — в отчёте). `settings.set` валидирует тип по дефолту.
+Фича может добавлять ключи только в своей ветке (новые ветки — в отчёте). `settings.set` валидирует тип по дефолту. Версия схемы — 2 (миграция 2: убраны `devtools.remoteDebugging*`, `capture: 'api'` → `'scoped'`, `chip` у общего бэнга gh).
 
-Прочие хранилища (userData): `session.json` (core), `history.json`, `bookmarks.json` (ux-chrome), `snippets.json` (tools-pack), `adblock-engine.bin` (platform), `extensions/` (platform), `claude-activity.json` (claude-bridge), `gen/tab-preload.js` (core).
+Прочие хранилища (userData): `scopes.json`, `packs.lock.json`, `packs/`, `pack-data/`, `gen/packs-index.json` (packs), `session.json` (core), `history.json`, `bookmarks.json` (ux-chrome), `snippets.json` (tools-pack), `adblock-engine.bin` (platform), `extensions/` (platform), `claude-activity.json` (claude-bridge), `gen/tab-preload.js` (core).
 
 ---
 
@@ -297,7 +307,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 ## 13. Claude-мост (MCP) — договорённости
 
 - HTTP MCP (Streamable HTTP, `@modelcontextprotocol/sdk`) на `127.0.0.1:<mcpPort>/mcp`. Обязательный `Authorization: Bearer <token>`. Запросы с заголовком `Origin` (кроме отсутствующего) или с `Host` не 127.0.0.1/localhost — отказ (защита от сайтов и DNS-rebinding).
-- Режимы доступа: `off` (сервер выключен), `read` (только чтение: список вкладок, снимок, HTML, скриншот, сеть, консоль), `full` (+ навигация, клики, ввод, eval, fetch_in_page, cookies).
+- Режимы доступа: `off` (сервер выключен), `read` (только чтение: список вкладок, снимок, HTML, скриншот, сеть, консоль), `full` (+ навигация, клики, ввод, eval, fetch_in_page, cookies). Это потолок: контейнер может понизить доступ (`scope.agentAccess`: off / read / ops / full) и скрыть секреты (`protect`) — §16.6.
 - Каждый вызов пишется в журнал (время, инструмент, кратко аргументы, вкладка, результат ok/ошибка) → панель Claude, а вкладка получает `claudeActiveAt` (полоса вкладок подсвечивает её ~3 с).
 - Подключение: `claude mcp add --scope user --transport http kosmolet http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"` (кнопка в настройках, только по нажатию пользователя) и `userData/gen/claude-mcp.json` для `claude --mcp-config` во встроенном терминале.
 - `ctx.cdp` (владелец devtools) — API для моста:
@@ -331,16 +341,18 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 
 ## 15. Производительность (бюджет)
 
+- Индекс паков (`gen/packs-index.json`) читается на старте за ≤ 5 мс (замер 1,8 мс); отпечаток встроенных паков сверяется после старта.
+
 - Холодный старт до видимого окна с вкладкой ≤ 1.5 с на этой машине; chrome UI ≤ 150 КБ JS без фреймворков.
 - Панель создаётся лениво (при первом открытии); overlay прогревается после загрузки первой вкладки (или через 4 с), чтобы первая подсказка адресной строки не ждала. Панель и overlay — `sandbox:true`, chrome — `sandbox:false` (нужен `electron-chrome-extensions`). Инструменты панели монтируются при первом показе.
-- CDP-захват по умолчанию только `api` (XHR/Fetch + документ), тела ответов — лениво (`Network.getResponseBody` по запросу), буфер `maxTotalBufferSize` 64 МБ.
+- CDP-захват по умолчанию `scoped` (PERF-8): API-запросы пишутся везде (каталог API работает), но полный буфер тел (64 МБ, тело запроса до 64 КБ) — только во вкладке на хосте захвата пака, включённого в её контейнере, и во вкладке, открытой в «Сеть и API»; остальные — лёгкий уровень (8 МБ, 2 МБ на ресурс, тело запроса до 16 КБ). Уровень пересчитывается при переходе, смене «Сети» и включении паков (повторный `Network.enable`). Тела ответов — лениво.
 - Никаких setInterval чаще 1 с в фоне; рассылки состояния — с троттлингом.
 
 ---
 
 ## Приложение: фактические API и каналы фич
 
-Сводка на 22.10.2026 по `docs/features-reports.md`, отчётам починщиков и коду (site-intel — 26.10.2026). При расхождении верен код. Порядок init фич (`main.js`): `platform, themes, cdp-hub, devtools, site-intel, ux-chrome, claude-bridge, claude-terminal, tools-pack`.
+Сводка на 22.10.2026 по `docs/features-reports.md`, отчётам починщиков и коду (site-intel, packs — 26.10.2026). При расхождении верен код. Порядок init фич (`main.js`): `packs, platform, themes, cdp-hub, devtools, site-intel, ux-chrome, claude-bridge, claude-terminal, tools-pack` (packs — первым: остальные читают его вклады).
 
 ### А1. API фич в ctx
 
@@ -358,6 +370,8 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | `ctx.extensions` | platform | `list()`, `install(id, containerId)`, `remove(id)`, `instance(containerId)` |
 | `ctx.platform` | platform | `{modal, adblock, extensions, permissions, containers}` — внутренние модули (`permissions.queue()`, `respond`, `revoke`, `listSaved`, `cancelTab`) |
 | `ctx.siteIntel` | site-intel | `enabled()`, `siteOf(hostOrUrl)` (регистрируемый домен, tldts с частными суффиксами), `siteForUrl(url)`, `siteForTab(tabId)`, `resolveSite({site?, tabId?})`, `noteAction(tabId, label, source: 'claude'\|'user', {kind})`, `catalog(site, {filter, method, limit})` → `{total, matched, items: [{index, key, method, host, path, query, count, last, auth, actions}]}`, `endpoint(site, key \| index)` → карточка (`params`, `reqSchema`/`resSchema` TS-подобным текстом, `headers`, `neededHeaders`, `auth`, `actions`, `initiators`, `pages`, `sample` — живой `{tab, id}` в буфере cdp, `exampleUrl`, `fetchTemplate`, `bodySkeleton`), `initiator(tabId, requestId)`, `recentActions(tabId, limit)`, `notes(site)`, `addNote(site, {text, tags, author})`, `updateNote`, `removeNote`, `forget(site)`, `sites()`, `clearAll()`, `counts(site)`, `hint(url)` (строка «Site knowledge…» для MCP), `stats()`, `flush()` |
+| `ctx.packs` | packs | см. §16.4 |
+| `ctx.scopes` | packs | см. §16.5 |
 | `ctx.toolsPack` | tools-pack | `snippets()`, `builtins()`, `runSnippet(tabId, code, world)` → `{ok, ms, logs, result, error, world, url}`, `xray(tabId)` → `{sections, notes, …}`, `matchUrl(pattern, url)` |
 
 **Точки расширения ядра, добавленные фичами и починщиками:**
@@ -382,6 +396,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | claude-terminal | `kosmo:term.*` (create, list, write, resize, kill, restart, replay `{withSeq}`, info, clipboard, pickCwd; `focusState` — через send) | `kosmo:term.data`, `kosmo:term.exit`, `kosmo:term.sessions`, `kosmo:term.reset`, `kosmo:term.show` |
 | platform | `kosmo:ext.*` (list, state, reload, remove, options, loadUnpacked, openFolder, openStore), `kosmo:adblock.*` (state, setEnabled, setSite, update), `kosmo:perm.*` (list, respond, revoke), `kosmo:containers.*` (stats, clearData, remove, chipMenu, newTab), `kosmo:privacy.*` (clearCache, clearCookies, uaInfo), `kosmo:platform.modalRespond` | `kosmo:adblock.counts`, `kosmo:adblock.status`, `kosmo:ext.changed`, `kosmo:perm.queue` |
 | tools-pack | `kosmo:snippets.*` (list, save, remove, run, runPicked, takeLast, autoLog, autoResult), `kosmo:xray.*` (run, toClaude), `kosmo:tools.*` (metrics, discardTab, paths, openFolder — открыты и внутренним страницам) | `kosmo:snippets.changed`, `kosmo:snippets.auto`, `kosmo:snippets.ran` |
+| packs | `kosmo:packs.*` (list, get, installFromFolder, update, pickInstall, pickLink, unlink, uninstall, rollback, reload, setEnabled, setGlobal, enableForContainer, validate, layer, hide, openFolder, showPending) и `kosmo:scopes.*` (list, get, set, patch, schemas) — для `ui` и `kosmo://settings`; `kosmo:packs.sheetRespond` — только webContents overlay | `kosmo:packs.changed`, `kosmo:scopes.changed`. Тип overlay `pack-sheet` |
 | site-intel | `kosmo:siteIntel.*` (summary `{tabId?}` → `{site, enabled, excluded, capture, total, items, notes}`, endpoint `{site, key}`, noteAdd/noteUpdate/noteRemove (автор `user`), forget, sites, clearAll, actions) — для `ui` и `kosmo://settings`; из вкладок `kosmo-tab:intel.action {kind: click\|submit\|enter\|change, label ≤ 60, tag, role, sel ≤ 120}` (недоверенные: проверка, обрезка, ≤ 5/с на вкладку, только главный фрейм того же origin) | `kosmo:siteIntel.changed {site, forgotten?}` (не чаще раза в секунду на сайт) |
 
 ### А3. Изолированные миры
@@ -395,6 +410,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | CDP `kosmolet-storage` (запасной 1718) | devtools | localStorage и sessionStorage в «Хранилище» |
 | CDP `kosmolet-snippet` (запасной 1818) | tools-pack | сниппеты в режиме «Изолированный» и Рентген; режим «Страница» — главный мир |
 | CDP `kosmolet-cdp` | devtools | мир по умолчанию у `ctx.cdp.evalInWorld` |
+| CDP `kosmolet-pack-<id>` | packs | сниппеты пака: автоматические (`run: auto`, на `dom-ready`) и ручные из библиотеки «Сниппеты» |
 
 Запасные числовые миры — путь Electron (`executeJavaScriptInIsolatedWorld`): он ждёт конца загрузки страницы. Основной путь — CDP. Автосниппеты намеренно идут путём Electron (после загрузки).
 
@@ -420,6 +436,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | `claude-activity.json` (500 записей), `gen/claude-mcp.json` (адрес и токен для `claude --mcp-config` и `mcp-call.mjs --profile`) | claude-bridge |
 | `adblock-engine.bin` (обновление раз в 7 дней), `extensions/`, `extensions-unpacked.json`, `containers-purge.json` | platform |
 | `snippets.json` | tools-pack |
+| `packs/<id>/<treeHash>/` (копии установленных паков, текущая + 2 предыдущие), `packs/.staging/`, `packs.lock.json`, `gen/packs-index.json`, `pack-data/<id>/`, `scopes.json` | packs |
 | `site-intel/<site>.json` — по файлу на сайт: `{v, site, created, updated, endpoints: {"METHOD host/path": {...}}, notes: []}`; атомарная запись (tmp + rename) с дебаунсом 1,5 с, синхронный сброс при выходе, в памяти до 16 сайтов | site-intel |
 | `main-stdout.log`, `main-stderr.log` (только при запуске через `start-dev.ps1`) | dev |
 
@@ -427,7 +444,8 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 
 ### А6. Dev и проверки
 
-- Флаги: `--dev`, `--profile`, `--dev-port`, `--cdp-port`, `--mcp-port`, `--no-restore`, `--open`; только в dev — `--offscreen`, `--ui-root`. В dev отключена окклюзия окон (`CalculateNativeWinOcclusion`), лог main копится и пишется асинхронно (остаток — при выходе), есть команда «Исследовать интерфейс» `Ctrl+Alt+Shift+I`.
+- Флаги: `--dev`, `--profile`, `--dev-port`, `--cdp-port` (= `--remote-debugging-port`), `--mcp-port`, `--no-restore`, `--open`, `--pack-dev`; только в dev — `--offscreen`, `--ui-root`.
+- Чистота и регрессии платформы: `node tools/purity-check.mjs` (и в smoke, и в pre-commit — `node tools/install-hooks.mjs`), `node tools/packs-test.mjs <devPort> <profile> [--shots]` (29 проверок). В dev отключена окклюзия окон (`CalculateNativeWinOcclusion`), лог main копится и пишется асинхронно (остаток — при выходе), есть команда «Исследовать интерфейс» `Ctrl+Alt+Shift+I`.
 - `tools/start-dev.ps1 … [-OnScreen] [-NoRestore] [-Open <url>] [-UiRoot <папка>]`; `tools/dev.mjs --port <n> eval "<код>" | eval --file <путь> | shot [файл] | logs [n] | quit | health`; `tools/smoke.mjs <dev> <cdp>`; `tools/mcp-call.mjs --profile <p>` (или `--port`, `--token`) `list | call <tool> '<json>'`.
 - Особенности проверок: `render-process-gone` после `forcefullyCrashRenderer` на этой машине приходит через 0,4–19 с (smoke ждёт до 25 с); тест `toggleOverlay` в smoke чувствителен к загрузке CPU (паузы 100–300 мс).
 
@@ -442,3 +460,119 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - **MCP** (bridge/tools.js, все READ): `site_api_catalog {site?|tabId?, filter?, method?, limit?}`, `site_api_endpoint {site?, key|index}` (с готовым вызовом `page_fetch` и id живого образца для `network_request`), `request_initiator {id, tabId?}`, `recent_actions {tabId?, limit?}`, `site_notes {site?}`, `site_note_add {site?, text, tags?}`, `site_note_remove {site?, id}` (запись заметок разрешена в режиме read — это память агента). `tabs_list`, `page_info`, `snapshot` добавляют строку `Site knowledge (<site>): N API endpoints, M notes — see site_api_catalog / site_notes`. INSTRUCTIONS сервера: сначала каталог и заметки, прямые вызовы API предпочтительнее кликов.
 - **Интерфейс:** инструмент панели `site` (`panel/tools/site.js/.css`), группа «Знания о сайтах» в разделе настроек devtools (`settings/sections/site-intel.js/.css`, вызывается из `sections/devtools.js` через `window.KSiteIntelSettings.render`).
 - **Проверка:** `node tools/site-intel-test.mjs <devPort> <profile>` (36 проверок: шаблоны, схемы, маскировка, привязка к кликам MCP и `sendInputEvent`, все MCP-инструменты, режим read, недоверенный IPC, вкл/выкл, исключения), после перезапуска — с `--persist`.
+
+---
+
+## 16. Платформа паков
+
+Решение владельца: **Космолёт — платформа, в ядре нет ничего про конкретные сайты.** Всё сайтовое — в паках. Пак объявляет, ядро исполняет и рисует; своего кода в браузере у пака нет (решение консилиума, разделы 1–4). Этот раздел — фундамент Этапа 1: формат, загрузчик, установка, умолчания сайтов, сниппеты, scope контейнеров и доступ агента. Операции, проверки, identity и исполнитель — следующий этап (сейчас только загружаются и проверяются).
+
+### 16.1. Формат пака
+
+Папка с `kosmo-pack.json` в корне. Проверка — `src/main/features/packs/manifest.js` (без electron), ошибки — `{file, path, message, hint}` («kosmo-pack.json › permissions.hosts[0] — хост со схемой — укажите только имя: shop.example.test»).
+
+```json
+{
+  "id": "demo.shop", "name": "Тестовая лавка", "version": "0.1.0", "engine": { "api": 1 },
+  "description": "…", "global": false, "protect": true,
+  "permissions": { "hosts": ["seller.example.test"], "capabilities": ["ops.read", "ops.write", "ops.money", "snippets", "capture"], "readClaims": ["item.list"] },
+  "contributes": {
+    "siteDefaults": { "bangs": [{ "key", "name", "url": "…{q}", "numericUrl?", "short?", "chip?" }], "bookmarks": [{ "title", "url" }],
+                      "adblockAllow": ["хост"], "siteThemes": { "хост": { "enabled", "engine", "brightness", … } }, "capture": ["хост"] },
+    "snippets": [{ "file": "snippets/ids.js", "match": ["seller.example.test/*"], "run": "auto|manual", "name?", "desc?" }],
+    "scopeSchema": "scopes/shop.schema.json", "identity": "scopes/identity.json",
+    "operations": "ops/*.op.json", "policies": "policies/*.json",
+    "agent": { "summary": "≤ 400", "skills": "agent/skills/", "claudeMd": "agent/CLAUDE.fragment.md (≤ 2 КБ)" }
+  }
+}
+```
+
+- **id** — с пространством имён (`acme.tools`); идентификаторы операций получают его: `demo.shop/item.update`. **engine.api** — 1.
+- **hosts** — имена без схемы, порта и пути; запись покрывает хост и его поддомены. Все хосты вкладов (бэнги, закладки, исключения, темы, захват, шаблоны сниппетов, хосты операций) обязаны входить в `hosts`.
+- **capabilities** обязательны для вкладов: `snippets` — для сниппетов, `capture` — для `siteDefaults.capture`, `ops.read`/`ops.write`/`ops.money` — по классу риска операций.
+- **Риск операции считает ядро**: GET/HEAD — read, иной метод — минимум write, DELETE — irreversible, поля `preview.money` — money; пак может только поднять. POST из `readClaims` станет чтением только после согласия человека на листе установки (`granted.readClaims` в lock).
+- **scopeSchema** — `{kind, title, label: "{client} · {platform}", account: "{accountId}", properties: {поле: {type: string|number|boolean, title, enum?, enumTitles?, default?, minimum?, maximum?, maxLength?, secret?, description?}}, required: [], rules: {properties, required}}`.
+- **identity** — `{source: cookie|op|page, cookie? | op+path? | selector/attr?, field: "fields.<поле>", sessionProbe?: {status: [401], redirectIncludes}}`.
+- **operation** — `{id, title, host, risk, scope?, input ({$ref} или схема), read?, request: {method, url, headers: {имя: строка | {$cookie} | {$scope: "fields.x"} | {$seen, maxAgeSec} | {$storage: "local|session", key}}, query?, body ({$from: "before", $patch} — чтение-изменение-запись)}, success: {status, json}, rowErrors, preview: {key, fields, money}, paginate: {kind: offset|cursor, param, size, items}, idempotent, rate: {perMin}, retry: {on, max}, saveTo}` — пять конструкций из решения консилиума 4.3 проверяются по структуре.
+- **policy** — `{id, kind: maxChangePct|skipWhere|maxLength, field, value: число | {$scope: "rules.x"}, where?, ops?}`.
+- Лимиты: 2000 файлов, 20 МБ на пак, 2 МБ на файл, сниппет ≤ 200 КБ (проверка синтаксиса), 500 операций, без символических ссылок.
+
+### 16.2. Загрузчик и хранилища (`features/packs.js`)
+
+- **Встроенные** — `packs/builtin/<папка>/`, часть приложения: права выданы, удалить нельзя (только выключить).
+- **Установка из папки** — копия в `userData/packs/<id>/<treeHash>/` (сначала в `packs/.staging/`, проверка и хэш — по копии: утверждается ровно то, что будет загружаться). Загрузка — только из копии; правка исходной папки ничего не меняет без «Обновить из папки». Хранятся текущая и 2 предыдущие копии.
+- **`packs.lock.json`**: `{id, version, treeHash, source: builtin|folder, sourcePath, enabled, global (null — как в манифесте), granted: {hosts, capabilities, readClaims, at}, history: [{treeHash, version, granted, at}], seeded, adopted}`.
+- **`gen/packs-index.json`** — скомпилированные декларации всех паков (код сниппетов остаётся в файлах). На старте ядро читает только его (замер 1,8 мс); встроенные сверяются по отпечатку (пути, размеры, время файлов) через 1,5 с после старта и пересобираются при изменении. Нет индекса или копии — пересборка по lock.
+- **Обновление** — новая копия и **лист разницы** (`perms.diff`): новые сайты, права, readClaims, операции записи/денег/необратимые, скрипты на новых сайтах, новые исключения блокировщика, изменённые инструкции агента (это тоже код). Права не расширились — лист «одной строкой» («Обновление 0.2.0 → 0.3.0, права не расширяются»).
+- **Откат** — к предыдущей копии (текущая становится предыдущей, можно вернуть). **Удаление** — «оставить данные» или «с данными» (`pack-data/<id>/`); scope контейнеров остаётся с пометкой «пак не установлен».
+- **Данные пака** — `userData/pack-data/<id>/` (`ctx.packs.dataDir(id)`), при обновлении не трогаются.
+
+### 16.3. Связанная папка (разработка)
+
+`--pack-dev=<папка>` или «Связать с папкой…» (`settings.packs.devFolders`). Пак работает прямо из папки как `dev:<id>`, `fs.watch` перечитывает его через 300 мс после изменения (сломанный манифест — ошибки в разделе «Паки», прежние декларации остаются). Такой пак **не включается в защищённых контейнерах** (реальные клиенты), пока его не установят обычным путём.
+
+### 16.4. `ctx.packs`
+
+| Метод | Что делает |
+|---|---|
+| `list()`, `info(id)`, `get(id)` | сведения для интерфейса (состояние словами, «включён в N из M», права фразами, prev) / скомпилированный манифест |
+| `installFromFolder(path)` → `{ok, pack, updated, unchanged} \| {ok:false, errors, warnings} \| {cancelled}` | установка или обновление через лист прав (ждёт ответа человека) |
+| `uninstall(id, {keepData})`, `rollback(id)`, `reload(id)`, `setEnabled(id, on)`, `setGlobal(id, on)` | жизненный цикл |
+| `enableForContainer(id, containerId, on)`, `isEnabled(id, containerId)` | включение по контейнерам: глобальный пак — во всех; выключение глобального в одном контейнере переводит его на список контейнеров (`scope.packs[]`) |
+| `contributions(type)` | вклады включённых паков: `bangs, bookmarks, adblockAllow, siteThemes, capture, siteDefaults, snippets, operations, policies, scopeSchema, identity, agent` → `[{pack, packName, value}]` |
+| `layer(type, {withHidden})`, `hide(type, key, on)` | слой умолчаний сайтов без скрытых пользователем ключей (`settings.packs.hidden`) |
+| `bangs()`, `adblockAllow()`, `siteThemes()` | готовые слои для ядра (поиск, блокировщик, темы) |
+| `captureHosts(cid)`, `isCaptureHost(cid, host)` | хосты захвата сети паков, включённых в контейнере |
+| `operations(cid)`, `operation('pack/op')`, `scopeSchema(id)`, `identity(id)`, `policies(id)`, `agent(id)` | **для исполнителя (следующий этап)**: операции с риском ядра (учтены выданные readClaims), схема, identity, проверки, знания агента |
+| `librarySnippets()`, `checkSnippetRun(s, tab)`, `snippetLog(tabId)` | ручные сниппеты паков в библиотеке «Сниппеты»; журнал автоматических |
+| `linkFolder(path)`, `unlinkFolder(path)`, `validateFolder(path)`, `dataDir(id)`, `pendingSheet()`, `showPending()`, `stats()`, `onChange(cb)` | разработка, проверка без установки, данные, лист в ожидании, замер индекса |
+
+События: `ctx.bus` `packs:changed` (умолчания, включение, scope), рассылка `kosmo:packs.changed`.
+
+**Лист прав и разницы** — overlay ядра (тип `pack-sheet`, `renderer/overlay/features/packs.js`): права фразами по группам («Отправляет изменения на seller.example.test — только после вашего утверждения»), для обновления — разница с пометками «новое / убрано / изменено». Ответ `kosmo:packs.sheetRespond` принимается **только от webContents overlay** (chrome, внутренние страницы и сайты получают отказ; инструменты моста адресуют вкладки — агент нажать «Установить» не может). Отмена — только явная (Esc, клик мимо, «Отмена»); смена вкладки или фокуса прячет лист, и он возвращается сам.
+
+### 16.5. Scope контейнеров — `ctx.scopes`
+
+Отдельный store `userData/scopes.json` по `containerId` (в settings остаются только `{id, name, color}`). Поля: `kind, pack, fields, rules, packs[], agentAccess (off|read|ops|full), mark (1–2 буквы), labels[], protect`.
+
+- `get(cid)` → итоговый scope (`agentAccess`, `protect` с умолчаниями, `packInstalled`, `health`, `chip`); `raw`, `set(cid, scope|null)`, `patch(cid, patch)` (поля проверяются по `scopeSchema` пака: тип, enum, required, min/max; ошибки — `e.errors [{path, message}]`), `list()`, `onChange(cb)`.
+- `isProtected(cid)` — явный `protect` или `manifest.protect` пака схемы. `agentAccess(cid)` — явный режим, иначе `ops` для защищённых, `full` для остальных.
+- `health(cid)` → `{state: ok|login|mismatch|unknown, at, detail}` — пока всегда `unknown`; `setHealth` — для исполнителя identity.
+- `chip(cid)` — если у scope есть пак со схемой и `label`: `{mark, label: "поле · поле", account, access, protect, health}`. Ядро кладёт его в `TabInfo.containerChip`; адресная строка рисует марку в цвете контейнера, подпись и тихим текстом аккаунт (иначе — прежний чип).
+- Настройки → Контейнеры → «Данные…»: форма генерируется по схеме пака (`sections/container-scope.js`), там же доступ агента, защита, марка и метки.
+
+### 16.6. Доступ агента по контейнеру (мост)
+
+Глобальный режим моста (`claude.access`) — потолок; `scope.agentAccess` может только понизить. Проверка — в `bridge/tools.js` при выборе вкладки или контейнера инструментом (`call.tab`, `call.container`):
+
+| Режим | Можно | Отказ |
+|---|---|---|
+| `off` | ничего во вкладках контейнера | «agent access to container … is off» |
+| `read` | снимок, скриншот, сеть, консоль, переход по URL, прокрутка, ожидание, GET/HEAD `page_fetch`, чтение cookies/storage | `click, type, press_key, select_option, hover, eval_js, cookies_set`, не-GET `page_fetch` — «container … is read-only» |
+| `ops` | то же, что read; запись — через `op_run` (следующий этап) | те же — «container … is ops-only: use op_run» |
+| `full` | всё, что разрешает глобальный режим | — |
+
+**Маскировка в защищённых контейнерах:** в `network_request` и ответных заголовках `page_fetch` значения заголовков авторизации (`authorization`, `cookie`, `set-cookie`, `*token*`, `*session*`, `*csrf*`, `*api-key*`, `*auth*`, `*secret*`) — `‹secret header:имя›`; в `cookies_get` значения HttpOnly-cookie — `‹secret cookie:имя›`. `containers_list` и `tabs_list` показывают `agent: <режим>`, `protected` и подпись scope.
+
+### 16.7. Умолчания сайтов: «пользователь > пак > ядро»
+
+| Вклад | Как живёт | Своя правка |
+|---|---|---|
+| `bangs` | `ctx.search.bangs()` = `settings.search.bangs` (свои + общие ядра: g, я, ya, ddg, gh, npm, mdn, so, yt, tr) + бэнги паков с новыми ключами | свой бэнг с тем же ключом главнее; «Скрыть» в Настройки → Поиск → «Из паков» |
+| `bookmarks` | добавляются один раз при первом включении пака (в начало полосы); для профиля, существовавшего до платформы, встроенный пак их не добавляет | дальше это обычные закладки пользователя |
+| `adblockAllow` | белый список блокировщика = свои + паков | щит «блокировать здесь» скрывает исключение пака (`packs.hidden.adblockAllow`), не стирая его |
+| `siteThemes` | `themes.resolve`: своя запись сайта, иначе запись пака (`siteConfig().pack`) | переключение темы создаёт свою запись (копию записи пака) |
+| `capture` | хосты подробного захвата сети в контейнерах, где пак включён (§15) | — |
+
+Выключение пака убирает только его слой; ручные правки остаются. **Перенос значений** (`adopt`): при первом включении встроенного пака совпавшие с его умолчаниями значения пользователя (прежние умолчания ядра) переходят к паку — поведение не меняется; изменённые пользователем остаются его.
+
+**Сниппеты паков:** `run: auto` — ядро выполняет их на `dom-ready` через CDP в изолированном мире `kosmolet-pack-<id>`, только на хостах манифеста и только во вкладках контейнеров, где пак включён; `run: manual` — в библиотеке «Сниппеты» (с пометкой пака), запуск — с теми же ограничениями.
+
+### 16.8. Стартовый пак и чистота ядра
+
+- `packs/builtin/marketplaces-starter/` (`kosmolet.marketplaces-starter`, глобальный): бэнги wb/oz/ym/av (`short`, `chip`), закладки первого запуска, исключения блокировщика для кабинетов продавца, тема WB на быстром движке (`filter`), подробный захват сети на кабинетах продавца, ручные сниппеты «WB: артикулы» и «Ozon: SKU». Внутренних API в нём нет.
+- **`tools/purity-check.mjs`**: правило 1 — домены сторонних сайтов (список в начале скрипта) запрещены в `src/`, `packs/`, `tools/`, кроме явного allowlist (стартовый пак, тесты); правило 2 — маркеры клиентов из локального `.purity-markers.txt` (в `.gitignore`, по строке на маркер) запрещены во всех файлах git. Вызывается первой проверкой `tools/smoke.mjs` и git-хуком pre-commit (`--staged`, ставит `node tools/install-hooks.mjs`). Нашёл — сайтовое в пак, имя клиента — никуда.
+
+### 16.9. Чего пока нет (следующий этап)
+
+Исполнитель операций и `op_run`/`op_test`/`run_status`, лист утверждения прогона, ledger, проверка identity и `sessionProbe`, применение `policies`, рабочая папка агента со скиллами и динамическими INSTRUCTIONS (`agent` пока только загружается и проверяется), перенос токена моста в safeStorage.

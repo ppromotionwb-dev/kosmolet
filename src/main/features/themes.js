@@ -8,9 +8,11 @@
 //   ~10 мс разбора V8 на каждом кадре каждой страницы. Часть '19-darkreader-lib' — маленький загрузчик: исходник
 //   запрашивается у main (sendSync) только когда тема включена и исполняется в мире preload (world 999).
 //
-// Ключ сайта — хост без www. Совпадение по родительским доменам: seller.wildberries.ru наследует wildberries.ru,
+// Ключ сайта — хост без www. Совпадение по родительским доменам: shop.example.com наследует example.com,
 // если своей записи нет. Записи: settings.siteThemes.sites[ключ] = { enabled, engine, brightness, contrast, sepia,
 // grayscale, bg, text, css } — всё, кроме enabled, необязательно (нет — берётся из defaults).
+// Слои «пользователь > пак > ядро»: запись пользователя (settings) главнее умолчаний паков (siteDefaults.siteThemes,
+// ctx.packs.siteThemes()); выключение пака ручные записи не трогает. Изменение сайта из пака создаёт свою запись.
 
 const fs = require('fs');
 const path = require('path');
@@ -106,7 +108,7 @@ function siteKey(host) {
 
 function isIp(h) { return /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':') || h.startsWith('['); }
 
-// wildberries.ru → [wildberries.ru]; seller.wildberries.ru → [seller.wildberries.ru, wildberries.ru]
+// example.com → [example.com]; shop.example.com → [shop.example.com, example.com]
 function candidates(key) {
   if (!key || isIp(key) || !key.includes('.')) return key ? [key] : [];
   const parts = key.split('.');
@@ -212,25 +214,19 @@ module.exports = {
       enums: { 'siteThemes.colorScheme': SCHEMES },
       ranges: { 'siteThemes.defaults.brightness': RANGE.brightness, 'siteThemes.defaults.contrast': RANGE.contrast },
     });
-    // Ревизии ветки: 1 — wildberries.ru включён, цвета страниц по умолчанию «в тон интерфейсу».
-    // 2 — на wildberries.ru по умолчанию движок «Быстрый» (filter): Dark Reader на WB (≈250 таблиц стилей) замедлял
-    //     загрузку в 2–4 раза (LCP 3 → 11 с, +200 МБ на вкладку). Явно выбранный движок не трогаем.
+    // Ревизии ветки: 1 — цвета страниц по умолчанию «в тон интерфейсу». 2 — (было: умолчания для одного магазина;
+    // теперь сайтовые умолчания темы приходят из паков — siteDefaults.siteThemes, см. features/packs).
     try {
       const rev = Number(S.peek('siteThemes.rev')) || 0;
       if (rev < 1) {
-        const sites = S.peek('siteThemes.sites') || {};
-        if (!sites['wildberries.ru']) S.set(['siteThemes', 'sites', 'wildberries.ru'], { enabled: true });
         const d = S.peek('siteThemes.defaults') || {};
         if (d.bg === '#14161c') S.set('siteThemes.defaults.bg', '');
         if (d.text === '#e6e6ea') S.set('siteThemes.defaults.text', '');
-        S.set('siteThemes.rev', 1);
       }
-      if (rev < 2) {
-        const wb = (S.peek('siteThemes.sites') || {})['wildberries.ru'];
-        if (isPlain(wb) && wb.engine == null) S.set(['siteThemes', 'sites', 'wildberries.ru'], Object.assign({}, wb, { engine: 'filter' }));
-        S.set('siteThemes.rev', 2);
-      }
+      if (rev < 2) S.set('siteThemes.rev', 2);
     } catch (e) { log('миграция настроек:', e.message); }
+    // Умолчания паков: хост → запись (+ _pack). Обновляются по событию packs:changed.
+    const packSites = () => { try { return ctx.packs ? ctx.packs.siteThemes() : {}; } catch (_) { return {}; } };
 
     // ---------- вычисление конфигурации ----------
     function autoColors() {
@@ -262,7 +258,9 @@ module.exports = {
       const key = siteKey(host);
       const st = S.peek('siteThemes') || {};
       const sites = isPlain(st.sites) ? st.sites : {};
-      const m = match(sites, key);
+      const fromPack = packSites();
+      const own = match(sites, key);
+      const m = own || match(fromPack, key);
       const entry = m ? m.entry : null;
       const mode = ['off', 'all', 'list'].includes(st.mode) ? st.mode : 'list';
       let dark;
@@ -282,7 +280,8 @@ module.exports = {
         key,
         matchedKey: m ? m.key : null,
         inherited: !!m && m.key !== key,
-        own: m && m.key === key ? Object.assign({}, entry) : null,
+        own: own && own.key === key ? Object.assign({}, entry) : null,
+        pack: !own && m ? m.entry._pack || null : null, // запись пришла из пака (умолчание), своей у пользователя нет
         mode,
         dark,
         enabled: dark, // итог: тёмная тема на этом сайте включена (= dark)
@@ -364,8 +363,9 @@ module.exports = {
       let entry;
       if (isPlain(sites[key])) entry = Object.assign({}, sites[key]);
       else {
-        const m = match(sites, key);
+        const m = match(sites, key) || match(packSites(), key);
         entry = m ? Object.assign({}, m.entry) : {};
+        delete entry._pack;
       }
       for (const [k, v] of Object.entries(p)) {
         if (v === null) delete entry[k]; else entry[k] = v;
@@ -402,10 +402,13 @@ module.exports = {
 
     function listSites() {
       const sites = S.peek('siteThemes.sites') || {};
-      return Object.keys(sites).sort().map((key) => {
-        const e = isPlain(sites[key]) ? sites[key] : {};
+      const fromPack = packSites();
+      const keys = Array.from(new Set(Object.keys(sites).concat(Object.keys(fromPack)))).sort();
+      return keys.map((key) => {
+        const mine = isPlain(sites[key]);
+        const e = mine ? sites[key] : fromPack[key];
         const params = PARAM_KEYS.filter((k) => e[k] != null && e[k] !== '');
-        return { key, enabled: typeof e.enabled === 'boolean' ? e.enabled : null, css: typeof e.css === 'string' ? e.css.length : 0, params };
+        return { key, enabled: typeof e.enabled === 'boolean' ? e.enabled : null, css: typeof e.css === 'string' ? e.css.length : 0, params, pack: mine ? null : e._pack || null };
       });
     }
 
@@ -453,6 +456,7 @@ module.exports = {
       }, 30);
     }
 
+    ctx.bus.on('packs:changed', () => schedulePush());
     S.on('change', (p) => {
       p = String(p || '');
       if (p === '' || p === 'siteThemes' || p.startsWith('siteThemes.')) {

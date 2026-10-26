@@ -7,7 +7,9 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
+    "dev": "electron . --dev --profile=dev",
+    "purity": "node tools/purity-check.mjs",
+    "hooks": "node tools/install-hooks.mjs",
     "selftest": "electron . --selftest"
   },
   "devDependencies": {

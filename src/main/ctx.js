@@ -80,6 +80,8 @@ function createCtx({ app, electron, flags, paths }) {
     search: null,
     preload: null,
     uiPreload: null,
+    packs: null,   // фича packs: загрузчик паков, умолчания сайтов, лист прав (features/packs.js)
+    scopes: null,  // фича packs: метаданные контейнеров scopes.json (features/packs/scopes.js)
     broadcast: () => {},
   };
 

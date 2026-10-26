@@ -11,7 +11,7 @@ function hostOf(url) {
   } catch (_) { return ''; }
 }
 
-// Запись белого списка: «https://seller.wildberries.ru/x» → «seller.wildberries.ru», «*.site.ru» → «site.ru».
+// Запись белого списка: «https://shop.example.com/x» → «shop.example.com», «*.site.ru» → «site.ru».
 function normHostEntry(s) {
   let v = String(s == null ? '' : s).trim().toLowerCase();
   if (!v) return '';

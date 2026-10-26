@@ -80,7 +80,7 @@
 
       function snippetRow(s, builtin) {
         const subParts = [];
-        if (builtin) subParts.push(s.desc || '');
+        if (builtin) { if (s.packName) subParts.push('пак «' + s.packName + '»'); subParts.push(s.desc || ''); }
         else {
           subParts.push(worldLabel(s.world));
           if (s.auto) subParts.push(s.match ? 'авто: ' + s.match : 'авто: сайт не задан');
@@ -159,7 +159,7 @@
         return b;
       });
       const autoSw = h('input.k-switch', { type: 'checkbox', 'aria-label': 'Автозапуск' });
-      const matchIn = h('input.k-input.k-input-sm.k-mono.tp-match', { type: 'text', spellcheck: 'false', placeholder: 'wildberries.ru, *.ozon.ru или ozon.ru/product/*', 'aria-label': 'Сайты для автозапуска' });
+      const matchIn = h('input.k-input.k-input-sm.k-mono.tp-match', { type: 'text', spellcheck: 'false', placeholder: 'example.com, *.example.com или example.com/product/*', 'aria-label': 'Сайты для автозапуска' });
       const autoRow = h('label.tp-auto-toggle', { title: 'Выполнять сам при загрузке подходящих страниц' }, autoSw, h('span', 'Автозапуск'));
       const optsEl = h('div.tp-ed-opts', h('div.tp-opt-line', worldSeg, autoRow), matchIn);
       const roBanner = h('div.tp-ro', U.icon('lock', 14), h('span.k-grow', 'Встроенный сниппет — только чтение'),

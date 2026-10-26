@@ -83,3 +83,6 @@
 .kst-css-state { font-size: var(--k-fs-xs); color: var(--k-text-faint); }
 .kst-css-state[data-kind="ok"] { color: var(--k-ok); }
 .kst-css-state[data-kind="error"] { color: var(--k-danger); }
+
+/* умолчания паков: удалить нельзя (только своя запись — переключателем) */
+.kst-site.from-pack .kst-del { display: none; }

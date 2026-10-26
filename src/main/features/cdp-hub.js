@@ -2,6 +2,10 @@
 // Фича «cdp-hub» (владелец devtools): CDP-захват сети и консоли вкладок, API ctx.cdp (ARCHITECTURE §13).
 //
 // - debugger.attach('1.3') лениво: на view-created, если settings.devtools.capture !== 'off', иначе по ensure().
+// - Режим 'scoped' (по умолчанию, решение PERF-8): записываются API-запросы, как в 'api', но буфер тел полный (64 МБ)
+//   только там, где это нужно: вкладка на хосте захвата пака, включённого в её контейнере (siteDefaults.capture,
+//   ctx.packs.isCaptureHost), или вкладка, открытая в «Сеть и API». Остальные — «лёгкий» уровень: буфер 8 МБ на вкладку,
+//   2 МБ на ресурс, тело запроса до 16 КБ. Каталог API (site-intel) работает на всех сайтах, как раньше.
 // - Network.enable (буфер тел 64 МБ / 8 МБ на ресурс); durable messages (тела переживают переход на другой
 //   процесс) — только для вкладки, открытой в «Сеть и API»; Runtime.enable/Log.enable — консоль (devtools.console).
 // - Запись: requestWillBeSent/ExtraInfo, responseReceived/ExtraInfo, loadingFinished/Failed, WebSocket и
@@ -20,6 +24,10 @@ const PROTOCOL = '1.3';
 const NET_BUFFER = 64 * 1024 * 1024;
 const NET_RESOURCE_BUFFER = 8 * 1024 * 1024;
 const POST_DATA_INLINE = 64 * 1024;          // тело запроса прямо в requestWillBeSent; больше — лениво
+// лёгкий уровень режима scoped (вкладки вне хостов захвата паков)
+const LIGHT_BUFFER = 8 * 1024 * 1024;
+const LIGHT_RESOURCE_BUFFER = 2 * 1024 * 1024;
+const LIGHT_POST_DATA = 16 * 1024;
 const CONSOLE_LIMIT = 500;
 const CONSOLE_TEXT = 8 * 1024;
 const PENDING_EXTRA_LIMIT = 400;
@@ -76,7 +84,7 @@ function createHub(ctx) {
   const S = ctx.settings;
 
   const setting = (k, d) => { const v = S.peek('devtools.' + k); return v === undefined ? d : v; };
-  const captureMode = () => { const m = setting('capture', 'api'); return m === 'off' || m === 'all' ? m : 'api'; };
+  const captureMode = () => { const m = setting('capture', 'scoped'); return m === 'off' || m === 'all' || m === 'api' ? m : 'scoped'; };
   const maxEntries = () => Math.max(100, Math.min(100000, Number(setting('maxEntries', 1500)) || 1500));
 
   function stateOf(tabId, create) {
@@ -88,13 +96,23 @@ function createHub(ctx) {
         entries: [], byId: new Map(), live: new Map(), extra: new Map(), console: [],
         paused: false, seq: 0, navSeq: 0, hop: 0, mainFrameId: null,
         dirty: new Map(), added: [], reset: false, batchTimer: null, onMessage: null, onDetach: null, closed: false,
-        modeOverride: null, netNeeded: false, durable: false,
+        modeOverride: null, netNeeded: false, durable: false, tier: null, navUrl: '',
       };
       states.set(id, st);
     }
     return st || null;
   }
   const tabMode = (st) => st.modeOverride || captureMode();
+  // Уровень записи вкладки: full — полный буфер; light — малый (только в режиме scoped, вне хостов захвата паков).
+  function tierOf(st) {
+    if (tabMode(st) !== 'scoped' || watched.has(st.tabId)) return 'full';
+    let url = st.navUrl;
+    try { if (!url && st.wc && !st.wc.isDestroyed()) url = st.wc.getURL(); } catch (_) { url = ''; }
+    let host = '';
+    try { host = new URL(url).hostname; } catch (_) { host = ''; }
+    const tab = ctx.tabs.get(st.tabId);
+    try { return host && tab && ctx.packs && ctx.packs.isCaptureHost(tab.info.containerId, host) ? 'full' : 'light'; } catch (_) { return 'light'; }
+  }
 
   // ---------- подключение ----------
 
@@ -151,11 +169,18 @@ function createHub(ctx) {
     const wantNet = mode !== 'off' || st.netNeeded;
     const wantConsole = mode !== 'off' && setting('console', true) !== false;
     st.mode = mode;
+    const tier = tierOf(st);
     try {
-      if (wantNet && !st.netOn) {
-        st.durable = false;
-        const durable = watched.has(st.tabId) ? setDurable(st, true) : null;
-        await cmd(st, 'Network.enable', { maxTotalBufferSize: NET_BUFFER, maxResourceBufferSize: NET_RESOURCE_BUFFER, maxPostDataSize: POST_DATA_INLINE });
+      if (wantNet && (!st.netOn || st.tier !== tier)) {
+        // повторный Network.enable применяет новые размеры буферов (смена уровня scoped на лету)
+        const first = !st.netOn;
+        if (first) st.durable = false;
+        const durable = first && watched.has(st.tabId) ? setDurable(st, true) : null;
+        const full = tier === 'full';
+        st.tier = tier;
+        await cmd(st, 'Network.enable', full
+          ? { maxTotalBufferSize: NET_BUFFER, maxResourceBufferSize: NET_RESOURCE_BUFFER, maxPostDataSize: POST_DATA_INLINE }
+          : { maxTotalBufferSize: LIGHT_BUFFER, maxResourceBufferSize: LIGHT_RESOURCE_BUFFER, maxPostDataSize: LIGHT_POST_DATA });
         st.netOn = true;
         await durable;
       } else if (!wantNet && st.netOn) {
@@ -300,7 +325,7 @@ function createHub(ctx) {
     // служебные страницы браузера (kosmo://newtab и т.п.) — не трафик сайта
     if (url && /^kosmo:/i.test(url)) return false;
     if (mode === 'all') return true;
-    // data: и blob: (картинки из CSS, иконки) — шум для режима API
+    // data: и blob: (картинки из CSS, иконки) — шум для режимов API и scoped
     if (url && /^(data|blob):/i.test(url)) return false;
     return API_TYPES.has(type);
   }
@@ -370,6 +395,9 @@ function createHub(ctx) {
       }
       if (setting('preserveLog', true) === false) clear(st.tabId);
       if (!/^kosmo:/i.test(String(req.url || ''))) addMarker(st, req.url);
+      // переход на другой хост: в режиме scoped уровень записи может смениться
+      st.navUrl = String(req.url || '');
+      if (st.netOn && tabMode(st) === 'scoped' && tierOf(st) !== st.tier) applyDomains(st);
       if (setting('preserveLog', true) === false) st.console = [];
     }
     let hop = 0;
@@ -879,7 +907,7 @@ function createHub(ctx) {
     const st = stateOf(tabId, false);
     const mode = st ? tabMode(st) : captureMode();
     return {
-      tabId: Number(tabId), attached: !!(st && st.attached), capturing: !!(st && st.netOn), mode, globalMode: captureMode(),
+      tabId: Number(tabId), attached: !!(st && st.attached), capturing: !!(st && st.netOn), mode, globalMode: captureMode(), tier: st ? st.tier : null,
       override: st ? st.modeOverride : null, paused: !!(st && st.paused), preserve: setting('preserveLog', true) !== false,
       total: st ? st.entries.filter((e) => !e.marker).length : 0, console: setting('console', true) !== false,
     };
@@ -888,7 +916,7 @@ function createHub(ctx) {
   // Включить запись для одной вкладки, даже если в настройках «выкл.» (кнопка в панели «Сеть»).
   async function captureTab(tabId, mode) {
     const st = stateOf(tabId, true);
-    st.modeOverride = mode === 'api' || mode === 'all' || mode === 'off' ? mode : null;
+    st.modeOverride = mode === 'api' || mode === 'all' || mode === 'off' || mode === 'scoped' ? mode : null;
     await ensure(tabId);
     await applyDomains(st);
     return info(tabId);
@@ -906,7 +934,7 @@ function createHub(ctx) {
     const id = Number(tabId);
     if (on) watched.add(id); else watched.delete(id);
     const st = stateOf(id, false);
-    if (st && st.attached && st.netOn) setDurable(st, !!on);
+    if (st && st.attached && st.netOn) { setDurable(st, !!on); if (tierOf(st) !== st.tier) applyDomains(st); }
     if (st && !on) { if (st.batchTimer) { clearTimeout(st.batchTimer); st.batchTimer = null; } st.dirty.clear(); st.added = []; st.reset = false; }
   }
 
@@ -931,7 +959,7 @@ function createHub(ctx) {
 
   ctx.tabs.on('view-created', (tab, wc) => {
     const st = stateOf(tab.id, true);
-    st.wc = wc; st.attached = false; st.netOn = false; st.consoleOn = false; st.mainFrameId = null;
+    st.wc = wc; st.attached = false; st.netOn = false; st.consoleOn = false; st.mainFrameId = null; st.tier = null; st.navUrl = '';
     if (tabMode(st) !== 'off') {
       // Синхронно до первой загрузки (loadURL вызывается сразу после события) — чтобы записать документ.
       attach(st).catch((e) => ctx.log('cdp', `вкладка ${tab.id}:`, e.message));
@@ -959,6 +987,10 @@ function createHub(ctx) {
     watched.delete(st.tabId);
   });
 
+  // паки включили/выключили хосты захвата — пересчитать уровень записи вкладок
+  ctx.bus.on('packs:changed', () => {
+    for (const st of states.values()) if (st.attached && st.netOn && tierOf(st) !== st.tier) applyDomains(st);
+  });
   S.on('change', (p) => {
     if (!(p === 'devtools' || p.startsWith('devtools.capture') || p.startsWith('devtools.console'))) return;
     for (const st of states.values()) {

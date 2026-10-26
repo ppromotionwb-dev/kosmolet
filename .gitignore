@@ -5,3 +5,4 @@ tools/dev-out/
 claude-inbox/
 *.log
 docs/private/
+.purity-markers.txt

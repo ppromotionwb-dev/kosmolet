@@ -7,19 +7,16 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { clone, isPlainObject } = require('./store');
 
-const VERSION = 1;
+const VERSION = 2;
 
+// Общие бэнги ядра (без сайтов-магазинов: сайтовые приходят из паков, слой «пользователь > пак > ядро»).
+// chip — показывать быстрой кнопкой на новой вкладке.
 const DEFAULT_BANGS = [
   { key: 'g', name: 'Google', url: 'https://www.google.com/search?q={q}' },
   { key: 'я', name: 'Яндекс', url: 'https://yandex.ru/search/?text={q}' },
   { key: 'ya', name: 'Яндекс', url: 'https://yandex.ru/search/?text={q}' },
   { key: 'ddg', name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q={q}' },
-  { key: 'wb', name: 'Wildberries', url: 'https://www.wildberries.ru/catalog/0/search.aspx?search={q}',
-    numericUrl: 'https://www.wildberries.ru/catalog/{q}/detail.aspx' },
-  { key: 'oz', name: 'Ozon', url: 'https://www.ozon.ru/search/?text={q}', numericUrl: 'https://www.ozon.ru/product/{q}/' },
-  { key: 'ym', name: 'Яндекс Маркет', url: 'https://market.yandex.ru/search?text={q}' },
-  { key: 'av', name: 'Авито', url: 'https://www.avito.ru/rossiya?q={q}' },
-  { key: 'gh', name: 'GitHub', url: 'https://github.com/search?q={q}&type=repositories' },
+  { key: 'gh', name: 'GitHub', url: 'https://github.com/search?q={q}&type=repositories', chip: true },
   { key: 'npm', name: 'npm', url: 'https://www.npmjs.com/search?q={q}' },
   { key: 'mdn', name: 'MDN', url: 'https://developer.mozilla.org/ru/search?q={q}' },
   { key: 'so', name: 'Stack Overflow', url: 'https://stackoverflow.com/search?q={q}' },
@@ -43,7 +40,7 @@ const DEFAULTS = {
   containers: [{ id: 'main', name: 'Основной', color: '#7c6cff' }],
   privacy: {
     adblock: true,
-    adblockAllow: ['seller.wildberries.ru', 'seller.ozon.ru', 'partner.market.yandex.ru', 'localhost'],
+    adblockAllow: ['localhost'], // + исключения из паков (нижний слой, см. ctx.packs.layer)
     userAgent: 'chrome', customUA: '',
     isolateNewTabs: false, // Ctrl+T и «+» открывают изолированную вкладку (свой временный контейнер)
   },
@@ -53,7 +50,9 @@ const DEFAULTS = {
     mcpEnabled: true, mcpPort: 47321, token: '', access: 'full',
     inboxDir: '', terminalCwd: '', claudeCommand: 'claude',
   },
-  devtools: { capture: 'api', maxEntries: 1500, remoteDebugging: false, remoteDebuggingPort: 9222 },
+  // capture: scoped — подробно только на хостах захвата паков и во вкладке «Сеть и API», остальное — лёгкий режим API.
+  // Порт удалённой отладки в настройках не хранится: только флаг запуска --cdp-port / --remote-debugging-port.
+  devtools: { capture: 'scoped', maxEntries: 1500 },
   sitePermissions: {},
 };
 
@@ -65,7 +64,7 @@ const ENUMS = {
   'search.engine': ['google', 'yandex', 'ddg', 'bing'],
   'privacy.userAgent': ['chrome', 'custom'],
   'claude.access': ['off', 'read', 'full'],
-  'devtools.capture': ['off', 'api', 'all'],
+  'devtools.capture': ['off', 'scoped', 'api', 'all'],
 };
 
 const RANGES = {
@@ -78,7 +77,6 @@ const RANGES = {
   'performance.discardAfterMin': [0, 1440],
   'claude.mcpPort': [1024, 65535],
   'devtools.maxEntries': [100, 100000],
-  'devtools.remoteDebuggingPort': [1024, 65535],
 };
 
 // Ветки-словари: ключи произвольные (домены, origin'ы), значения — любые JSON.
@@ -201,6 +199,25 @@ function deepMergeDefaults(target, extra) {
 
 const MIGRATIONS = {
   // 1: начальная версия схемы.
+  // 2: платформа паков. Порт удалённой отладки больше не настройка (только флаг запуска); запись сети по умолчанию —
+  //    scoped (прежнее значение по умолчанию api переводится; явно выбранные all/off не трогаем).
+  //    Сайтовые бэнги, исключения блокировщика и тема сайта, совпадающие со стартовым паком, пак забирает себе сам
+  //    при первом включении (features/packs: adopt) — здесь про сайты ничего не знаем.
+  2(d) {
+    if (isPlainObject(d.devtools)) {
+      delete d.devtools.remoteDebugging;
+      delete d.devtools.remoteDebuggingPort;
+      if (d.devtools.capture === 'api') d.devtools.capture = 'scoped';
+    }
+    // быстрые кнопки новой вкладки теперь — флаг chip у бэнга (раньше список ключей был зашит в ux-chrome)
+    if (isPlainObject(d.search) && Array.isArray(d.search.bangs)) {
+      for (const b of d.search.bangs) {
+        const def = DEFAULT_BANGS.find((x) => x.chip && isPlainObject(b) && x.key === b.key && x.url === b.url);
+        if (def && b.chip == null) b.chip = true;
+      }
+    }
+    return d;
+  },
 };
 
 function createSettings(ctx) {

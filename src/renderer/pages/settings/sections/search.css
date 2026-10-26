@@ -29,3 +29,7 @@
 .ss-field.wide { grid-column: 1 / -1; }
 .ss-field .k-input { width: 100%; }
 .ss-form-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* бэнги паков */
+.ss-bang.dim .ss-bang-name, .ss-bang.dim .ss-bang-url, .ss-bang.dim .ss-key { opacity: 0.55; }
+.ss-over { font-size: var(--k-fs-xs); margin-left: 6px; }

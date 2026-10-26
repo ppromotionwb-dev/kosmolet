@@ -35,7 +35,7 @@
 
   KSettings.section({
     id: 'site-themes', title: 'Темы сайтов', icon: 'moon', order: 20,
-    keywords: 'тёмная тема сайтов dark reader css яркость контраст сепия фильтр prefers-color-scheme wildberries',
+    keywords: 'тёмная тема сайтов dark reader css яркость контраст сепия фильтр prefers-color-scheme',
     description: 'Тёмная тема для любого сайта — даже для тех, где своей нет. Быстро: луна в адресной строке или Alt+Shift+D.',
     render(el, api) {
       const ui = api.ui;
@@ -87,7 +87,7 @@
       ui.watch('ui.custom', loadAuto);
 
       // ---------- сайты ----------
-      const addIn = h('input.k-input.kst-add-in', { type: 'text', spellcheck: 'false', placeholder: 'например, ozon.ru', 'aria-label': 'Адрес сайта' });
+      const addIn = h('input.k-input.kst-add-in', { type: 'text', spellcheck: 'false', placeholder: 'например, example.com', 'aria-label': 'Адрес сайта' });
       const addBtn = h('button.k-btn.k-btn-primary', { type: 'button' }, U.icon('plus', 14), 'Добавить');
       const add = () => {
         const v = addIn.value.trim();
@@ -100,7 +100,7 @@
       addIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
       const list = h('div.kst-sites');
       const sitesGroup = ui.group('Сайты',
-        ui.row('Добавить сайт', h('div.kst-add', addIn, addBtn), 'Поддомены наследуют настройки: seller.wildberries.ru берёт их у wildberries.ru'));
+        ui.row('Добавить сайт', h('div.kst-add', addIn, addBtn), 'Поддомены наследуют настройки: shop.example.com берёт их у example.com'));
       sitesGroup.appendChild(ui.free(list));
       const open = new Set(); // ключи с открытым редактором CSS
       const editors = new Map();
@@ -170,8 +170,20 @@
       }
 
       let focusedKey = null;
+      // умолчания паков (нижний слой): показываются, пока у сайта нет своей записи; правка создаёт свою запись
+      let packSites = {};
+      function loadPackSites() {
+        return api.invoke('kosmo:packs.layer', { type: 'siteThemes' }).then((r) => {
+          const next = {};
+          for (const it of (r && r.items) || []) if (!it.hidden) next[it.key] = Object.assign({}, it.value, { __pack: it.packName });
+          packSites = next;
+          renderSites();
+        }).catch(() => {});
+      }
+      U.on('kosmo:packs.changed', loadPackSites);
       function renderSites() {
-        const sites = api.get('siteThemes.sites') || {};
+        const own = api.get('siteThemes.sites') || {};
+        const sites = Object.assign({}, packSites, own);
         const mode = api.get('siteThemes.mode') || 'list';
         const keys = Object.keys(sites).sort();
         // редактор в фокусе после перерисовки возвращаем в фокус (с тем же выделением)
@@ -187,6 +199,13 @@
         for (const k of keys) {
           const r = siteRow(k, sites[k], mode);
           r.dataset.key = k;
+          if (!own[k] && sites[k].__pack) {
+            r.classList.add('from-pack');
+            const desc = r.querySelector('.kst-site-desc');
+            if (desc) desc.textContent = 'умолчание пака «' + sites[k].__pack + '» · ' + desc.textContent;
+            const del = r.querySelector('.kst-del');
+            if (del) del.hidden = true;
+          }
           list.appendChild(r);
         }
         if (focused && editors.get(focused)) {
@@ -202,6 +221,7 @@
 
       el.append(modeGroup, defGroup, sitesGroup);
       loadAuto();
+      loadPackSites();
     }
   });
 })();

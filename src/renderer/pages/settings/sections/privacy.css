@@ -50,3 +50,9 @@
 .kpv-pchip.deny .kpv-pchip-v { color: var(--k-danger); }
 .kpv-pchip-x { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--k-text-faint); }
 .kpv-pchip-x:hover { color: var(--k-text); background: var(--k-surface-hover); }
+
+/* исключения паков */
+.kpv-allow[hidden] { display: none; }
+.kpv-pack .kpv-chip-src { color: var(--k-text-faint); font-size: var(--k-fs-xs); margin: 0 2px 0 6px; }
+.kpv-pack.off .kpv-chip-text { text-decoration: line-through; color: var(--k-text-faint); }
+.kpv-pack .k-btn { height: 20px; padding: 0 6px; }

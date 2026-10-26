@@ -1,16 +1,16 @@
 'use strict';
-// ux-chrome: подсказки адресной строки. Провайдер для ctx.search (история, закладки, «Товар WB 123»)
+// ux-chrome: подсказки адресной строки. Провайдер для ctx.search (история, закладки, «Товар <бэнг> 123»)
 // + сборка строк для выпадающего списка: «перейти/найти» первой, инлайн-дополнение домена, вкладки, бэнги.
 
 const { shown, urlKey, describe } = require('./util');
 
 const MAX_ROWS = 8;
-const SHORT = { wb: 'WB', oz: 'Ozon', ym: 'Маркет', av: 'Авито' };
 
 function createOmni(ctx, history, bookmarks) {
   const S = ctx.search;
 
-  function bangLabel(b) { return SHORT[b.key] || b.name; }
+  // Короткое имя бэнга (поле short — из пака или своего бэнга), иначе название.
+  function bangLabel(b) { return b.short || b.name; }
 
   function bookmarkMatches(q, limit) {
     const ts = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -93,7 +93,7 @@ function createOmni(ctx, history, bookmarks) {
     const q = raw.trim();
     if (!q) return { input: raw, items: [], inline: null, ms: 0 };
 
-    // «wb » — бэнг без запроса
+    // «gh » — бэнг без запроса
     const mb = /^!?(\S+)\s+$/.exec(raw);
     const bangOnly = mb ? S.findBang(mb[1]) : null;
     const r = bangOnly ? S.resolve('!' + bangOnly.key) : S.resolve(q);
@@ -175,7 +175,9 @@ function createOmni(ctx, history, bookmarks) {
     const bar = bookmarks.list('bar').slice(0, 12);
     const bm = new Set(bookmarks.list().map((b) => urlKey(b.url)));
     const frequent = history.top(24).filter((h) => !bm.has(urlKey(h.url))).slice(0, 8);
-    const chips = ['wb', 'oz', 'ym', 'av', 'gh'].map((k) => S.findBang(k)).filter(Boolean).map((b) => ({ key: b.key, name: b.name }));
+    // быстрые кнопки — бэнги с chip: сначала из паков, потом свои и ядра
+    const all = S.bangs().filter((b) => b.chip);
+    const chips = all.filter((b) => b.pack).concat(all.filter((b) => !b.pack)).slice(0, 8).map((b) => ({ key: b.key, name: b.name }));
     return { bar, frequent, chips, engine: S.engine().name };
   }
 

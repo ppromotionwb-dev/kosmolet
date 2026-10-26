@@ -43,12 +43,17 @@ function createAdblock(ctx) {
   let retryTimer = null;
 
   // ---------- настройки ----------
+  // Белый список — слои «пользователь > пак > ядро»: privacy.adblockAllow (свои записи) + исключения включённых паков
+  // (ctx.packs.adblockAllow(), без скрытых пользователем — packs.hidden.adblockAllow).
   let allowList = [];
+  function packAllow() { try { return ctx.packs ? ctx.packs.adblockAllow() : []; } catch (_) { return []; } }
   function readAllow() {
     const raw = ctx.settings.peek('privacy.adblockAllow');
-    allowList = (Array.isArray(raw) ? raw : []).map(normHostEntry).filter(Boolean);
+    const own = (Array.isArray(raw) ? raw : []).map(normHostEntry).filter(Boolean);
+    allowList = Array.from(new Set(own.concat(packAllow().map(normHostEntry).filter(Boolean))));
   }
   readAllow();
+  ctx.bus.on('packs:changed', () => { readAllow(); broadcastStatus(); });
   const enabled = () => ctx.settings.peek('privacy.adblock') !== false;
   const allowedHost = (host) => !!matchList(host, allowList);
 
@@ -327,6 +332,7 @@ function createAdblock(ctx) {
       updatedAt: info.updatedAt || 0,
       size: info.size || 0,
       total,
+      allowList: allowList.slice(), // итоговый белый список (свои + паки) — для щита в адресной строке
     };
   }
   let statusTimer = null;
@@ -357,13 +363,20 @@ function createAdblock(ctx) {
     if (!h) throw new Error('не удалось определить сайт');
     const raw = ctx.settings.get('privacy.adblockAllow') || [];
     let list = raw.slice();
+    const coversH = (e) => { const n = normHostEntry(e); return !!(n && (h === n || h.endsWith('.' + n) || (n === 'localhost' && matchList(h, ['localhost'])))); };
     if (block) {
-      // убрать все записи, которые покрывают этот хост (иначе блокировка так и не включится)
-      list = list.filter((e) => { const n = normHostEntry(e); return !(n && (h === n || h.endsWith('.' + n) || (n === 'localhost' && matchList(h, ['localhost'])))); });
+      // убрать все записи, которые покрывают этот хост (иначе блокировка так и не включится);
+      // исключения паков не стираются, а скрываются пользователем (packs.hidden.adblockAllow)
+      list = list.filter((e) => !coversH(e));
+      if (ctx.packs) for (const e of packAllow()) if (coversH(e)) ctx.packs.hide('adblockAllow', e, true);
     } else if (!matchList(h, list.map(normHostEntry))) {
+      // было скрыто исключение пака — вернуть его, иначе своя запись
+      const hiddenPack = ctx.packs ? ctx.packs.layer('adblockAllow', { withHidden: true }).filter((x) => x.hidden && coversH(x.key)) : [];
+      if (hiddenPack.length) { for (const x of hiddenPack) ctx.packs.hide('adblockAllow', x.key, false); readAllow(); return list; }
       list.push(h);
     }
     ctx.settings.set('privacy.adblockAllow', list);
+    readAllow();
     return list;
   }
 

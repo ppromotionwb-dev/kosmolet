@@ -35,3 +35,8 @@
 .kc-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .kc-foot .k-faint { font-size: var(--k-fs-sm); line-height: 1.4; }
 .kc-foot .k-btn { flex-shrink: 0; }
+
+/* метаданные контейнера (scope) в строке */
+.kc-sub { flex-wrap: wrap; }
+.kc-scope { display: inline-flex; align-items: center; gap: 6px; color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kc-smark { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: var(--kc); color: #fff; font-size: 9px; font-weight: 700; }

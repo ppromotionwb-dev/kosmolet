@@ -1,17 +1,13 @@
 'use strict';
 // ux-chrome: закладки (userData/bookmarks.json). {id, title, url, folder: 'bar'|'other', addedAt, favicon?}.
-// Первый старт — набор кабинетов на полосе. Порядок в массиве = порядок на полосе / в «Других».
+// Первый старт — общие закладки ядра на полосе; сайтовые приходят из паков (siteDefaults.bookmarks, один раз
+// при первом включении пака — features/packs). Порядок в массиве = порядок на полосе / в «Других».
 
 const crypto = require('crypto');
 const { urlKey, describe } = require('./util');
 
 const FOLDERS = ['bar', 'other'];
 const SEED = [
-  { title: 'WB Партнёры', url: 'https://seller.wildberries.ru/' },
-  { title: 'Ozon Seller', url: 'https://seller.ozon.ru/' },
-  { title: 'Яндекс Маркет', url: 'https://partner.market.yandex.ru/' },
-  { title: 'Авито', url: 'https://www.avito.ru/profile' },
-  { title: 'Пульт агента', url: 'https://pult-agenta.pult-agenta.workers.dev/' },
   { title: 'GitHub', url: 'https://github.com/' },
   { title: 'Claude', url: 'https://claude.ai/' },
 ];

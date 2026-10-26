@@ -8,3 +8,9 @@
 }
 .kdt-warn > .k-ic { color: var(--k-warn); margin-top: 1px; }
 .kdt-warn b { font-weight: 600; }
+.kdt-how { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.45; }
+.kdt-cmd {
+  align-self: flex-start; padding: 4px 8px; border-radius: var(--k-radius-sm);
+  background: var(--k-bg-sunken); border: 1px solid var(--k-border); color: var(--k-text);
+  user-select: all;
+}

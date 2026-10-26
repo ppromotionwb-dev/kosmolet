@@ -50,6 +50,17 @@
 .kp-container.temp .kp-cdot { background: transparent; box-shadow: inset 0 0 0 2px var(--kp-c, var(--k-accent)); }
 .kp-cname { min-width: 0; }
 #omnibox.focused .kp-container { display: none; }
+/* чип с метаданными контейнера (scope пака): марка в цвете контейнера, подпись, аккаунт тихим текстом */
+.kp-container.scoped { max-width: 300px; padding-left: 3px; gap: 7px; }
+.kp-cdot[hidden], .kp-cmark[hidden], .kp-cacc[hidden] { display: none; }
+.kp-cmark {
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+  background: var(--kp-c, var(--k-accent)); color: #fff;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.kp-cacc { min-width: 0; max-width: 110px; color: var(--k-text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
 
 /* ---------- полоса разрешений ---------- */
 .kp-perm { gap: 10px; padding: 4px 8px 4px 12px; min-height: calc(var(--k-bm-h) + 8px); background: var(--k-bg-elev); }

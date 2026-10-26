@@ -32,7 +32,7 @@ const UI_NAMES = { chrome: 'Окно и вкладки (интерфейс)', pa
 function str(v, max) { const s = v == null ? '' : String(v); return max && s.length > max ? s.slice(0, max) : s; }
 function newId() { return 's-' + crypto.randomBytes(6).toString('hex'); }
 
-// match: подстрока адреса | маска хоста (*.ozon.ru) | маска адреса (ozon.ru/product/*) | * — все сайты. Несколько — через запятую или пробел.
+// match: подстрока адреса | маска хоста (*.example.com) | маска адреса (example.com/product/*) | * — все сайты. Несколько — через запятую или пробел.
 function globRe(g, prefix) {
   return new RegExp('^' + (prefix || '') + g.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$', 'i');
 }
@@ -96,7 +96,10 @@ function init(ctx) {
     const d = store.get();
     return Array.isArray(d && d.items) ? d.items.filter((x) => x && ID_RE.test(String(x.id))) : [];
   }
-  function find(id) { return all().find((x) => x.id === id) || library.get(String(id || '')) || null; }
+  // Библиотека: встроенные сниппеты + ручные сниппеты включённых паков (мир пака, только его хосты и контейнеры).
+  function packLib() { try { return ctx.packs ? ctx.packs.librarySnippets() : []; } catch (_) { return []; } }
+  function builtins() { return library.BUILTINS.concat(packLib()); }
+  function find(id) { const k = String(id || ''); return all().find((x) => x.id === k) || library.get(k) || packLib().find((x) => x.id === k) || null; }
   function broadcastList() { ctx.broadcast('kosmo:snippets.changed', { items: all() }); }
   function save(s) {
     const items = all();
@@ -124,14 +127,27 @@ function init(ctx) {
   }
   async function run(p = {}) {
     const tab = tabFor(p.tabId);
-    let code, world, name, id = null;
-    if (p.code != null) { code = str(p.code); world = p.world; name = str(p.name, NAME_LIMIT); id = p.id ? str(p.id, 64) : null; }
+    let code, world, name, id = null, packWorld;
+    if (p.code != null) {
+      code = str(p.code); world = p.world; name = str(p.name, NAME_LIMIT); id = p.id ? str(p.id, 120) : null;
+      const s = id && id.startsWith('pack:') ? find(id) : null;
+      if (s && s.pack) { // сниппет пака из редактора: те же ограничения, что и по id
+        const why = ctx.packs.checkSnippetRun(s, tab);
+        if (why) throw new Error(why);
+        code = s.code; world = 'isolated'; packWorld = s.worldName;
+      }
+    }
     else {
-      const s = find(str(p.id, 64));
+      const s = find(str(p.id, 120));
       if (!s) throw new Error('Сниппет не найден');
       ({ code, world, name } = s); id = s.id;
+      if (s.pack) {
+        const why = ctx.packs.checkSnippetRun(s, tab);
+        if (why) throw new Error(why);
+        packWorld = s.worldName;
+      }
     }
-    const r = await runner.runInTab(tab, code, { world, timeoutMs: Number(p.timeoutMs) || undefined });
+    const r = await runner.runInTab(tab, code, { world, worldName: packWorld, timeoutMs: Number(p.timeoutMs) || undefined });
     return Object.assign(r, { tabId: tab.id, id, name, at: Date.now() });
   }
 
@@ -180,7 +196,7 @@ function init(ctx) {
       type: 'tools-snippet-pick', modal: true, focus: true,
       data: {
         items: all().map((s) => ({ id: s.id, name: s.name, world: s.world, auto: s.auto, match: s.match })),
-        builtins: library.BUILTINS.map((s) => ({ id: s.id, name: s.name, desc: s.desc, world: s.world })),
+        builtins: builtins().map((s) => ({ id: s.id, name: s.name, desc: s.desc, world: s.world, pack: s.packName || undefined })),
         host, canRun: runner.isWebUrl(url),
       },
     });
@@ -279,7 +295,7 @@ function init(ctx) {
 
   // ---------- IPC ----------
   const H = (ch, fn, allow) => ctx.ipc.handle(ch, fn, { allow: allow || ['ui'] });
-  H('kosmo:snippets.list', () => ({ items: all(), builtins: library.BUILTINS }));
+  H('kosmo:snippets.list', () => ({ items: all(), builtins: builtins() }));
   H('kosmo:snippets.save', (p = {}) => save(p.snippet || p));
   H('kosmo:snippets.remove', (p = {}) => remove(str(p.id, 64)));
   H('kosmo:snippets.run', (p = {}) => run(p));
@@ -288,7 +304,7 @@ function init(ctx) {
     const rec = autoLog.get(Number(p.tabId));
     return rec && rec.full[Number(p.index)] ? rec.full[Number(p.index)] : null;
   });
-  H('kosmo:snippets.runPicked', (p = {}) => { runPicked(str(p.id, 64)).catch((e) => ctx.log('tools-pack', e)); return true; });
+  H('kosmo:snippets.runPicked', (p = {}) => { runPicked(str(p.id, 120)).catch((e) => ctx.log('tools-pack', e)); return true; });
   H('kosmo:snippets.takeLast', () => {
     const l = lastPicked;
     lastPicked = null;
@@ -343,7 +359,7 @@ function init(ctx) {
 
   ctx.toolsPack = {
     snippets: () => all(),
-    builtins: () => library.BUILTINS,
+    builtins: () => builtins(),
     runSnippet: (tabId, code, world) => runner.runInTab(tabFor(tabId), code, { world }),
     xray: (tabId) => xray.run(ctx, tabFor(tabId)),
     matchUrl,

@@ -7,7 +7,7 @@
 
   const ENGINES = [['google', 'Google'], ['yandex', 'Яндекс'], ['ddg', 'DuckDuckGo'], ['bing', 'Bing']];
   const KIND = { url: 'Адрес', search: 'Поиск', bang: 'Бэнг', internal: 'Страница Космолёта' };
-  const EXAMPLES = ['wb кроссовки', 'oz 123456', 'gh electron', 'github.com', 'localhost:3000', 'как сварить борщ'];
+  const EXAMPLES = ['gh electron', 'npm react', 'github.com', 'localhost:3000', 'как сварить борщ'];
 
   function clean(e) { return String((e && e.message) || e || '').replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '').replace(/^./, (c) => c.toUpperCase()); }
 
@@ -28,8 +28,8 @@
 
   KSettings.section({
     id: 'search', title: 'Поиск', icon: 'search', order: 30,
-    keywords: 'поисковик бэнги google яндекс duckduckgo bing подсказки адресная строка wb ozon',
-    description: 'Куда уходит запрос из адресной строки и бэнги — короткие ключи для поиска по сайтам: «wb кроссовки», «gh electron».',
+    keywords: 'поисковик бэнги google яндекс duckduckgo bing подсказки адресная строка',
+    description: 'Куда уходит запрос из адресной строки и бэнги — короткие ключи для поиска по сайтам: «gh electron», «npm react». Паки добавляют свои бэнги — они ниже, в «Из паков».',
     render(el, api) {
       const ui = api.ui;
 
@@ -38,7 +38,7 @@
         ui.select('Поисковая система', 'search.engine', ENGINES, 'Если ввод не похож на адрес и не начинается с бэнга')));
 
       // ---------- проверка ввода ----------
-      const input = h('input.k-input.ss-try-input', { type: 'text', spellcheck: 'false', placeholder: 'Например: wb кроссовки', 'aria-label': 'Проверить ввод' });
+      const input = h('input.k-input.ss-try-input', { type: 'text', spellcheck: 'false', placeholder: 'Например: gh electron', 'aria-label': 'Проверить ввод' });
       const result = h('div.ss-try-result');
       const chips = h('div.ss-try-chips', EXAMPLES.map((x) => {
         const b = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button' }, x);
@@ -72,10 +72,52 @@
       const addBtn = h('button.k-btn.k-btn-sm.k-btn-primary', { type: 'button' }, U.icon('plus', 14), 'Добавить');
       const resetBtn = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: 'Вернуть набор бэнгов по умолчанию' }, 'Вернуть стандартные');
       const head = h('div.ss-bangs-head',
-        h('div.ss-bangs-hint', 'Введите ключ и пробел в адресной строке: ', h('span.k-kbd', 'wb'), ' ', h('span.k-faint', 'кроссовки'), '. Если у бэнга есть адрес для артикула, одни цифры откроют товар.'),
+        h('div.ss-bangs-hint', 'Введите ключ и пробел в адресной строке: ', h('span.k-kbd', 'gh'), ' ', h('span.k-faint', 'electron'), '. Если у бэнга есть адрес для артикула, одни цифры откроют товар.'),
         h('div.k-row', resetBtn, addBtn));
       const bangAnchor = anchor('бэнги');
       el.appendChild(ui.group('Бэнги', ui.free(head), ui.free(listBox), bangAnchor));
+      // бэнги паков — нижний слой: свой бэнг с тем же ключом главнее; скрытый не работает, пока не вернёте
+      const packBox = h('div.ss-bangs.ss-pack-bangs');
+      const packAnchor = anchor('бэнги паков');
+      const packGroup = ui.group('Из паков', ui.free(packBox), packAnchor);
+      packGroup.hidden = true;
+      el.appendChild(packGroup);
+      let packItems = [];
+      function loadPackBangs() {
+        return api.invoke('kosmo:packs.layer', { type: 'bangs' }).then((r) => { packItems = (r && r.items) || []; renderPack(); }).catch(() => {});
+      }
+      function renderPack() {
+        U.clear(packBox);
+        packGroup.hidden = !packItems.length;
+        const own = new Set(bangs().map((b) => b.key));
+        packAnchor.dataset.search = ('бэнги паков ' + packItems.map((x) => x.key + ' ' + (x.value.name || '')).join(' ')).toLowerCase();
+        for (const it of packItems) {
+          const b = it.value;
+          const over = own.has(b.key);
+          const acts = h('div.ss-bang-acts');
+          if (!over) {
+            const edit = h('button.k-icon-btn', { type: 'button', title: 'Изменить (станет вашим бэнгом)', 'aria-label': 'Изменить', html: window.KIcons.get('pencil', 14) });
+            edit.addEventListener('click', () => {
+              const nb = { key: b.key, name: b.name, url: b.url };
+              if (b.numericUrl) nb.numericUrl = b.numericUrl;
+              if (b.short) nb.short = b.short;
+              if (b.chip) nb.chip = true;
+              save(bangs().concat(nb)).then(() => { editing = b.key; render(); renderPack(); }).catch(() => {});
+            });
+            const hide = h('button.k-btn.k-btn-sm.k-btn-ghost', { type: 'button', title: it.hidden ? 'Снова включить бэнг пака' : 'Не использовать этот бэнг пака' }, it.hidden ? 'Вернуть' : 'Скрыть');
+            hide.addEventListener('click', () => api.invoke('kosmo:packs.hide', { type: 'bangs', key: b.key, hidden: !it.hidden }).then(loadPackBangs).catch((e) => U.toast(clean(e), { tone: 'danger' })));
+            acts.append(edit, hide);
+          }
+          packBox.appendChild(h('div.ss-bang' + (it.hidden || over ? '.dim' : ''), { dataset: { key: b.key } },
+            h('span.k-kbd.ss-key', b.key),
+            h('div.ss-bang-text',
+              h('div.ss-bang-name', b.name || b.key, h('span.k-badge.ss-num', { title: 'Бэнг из пака' }, 'пак «' + it.packName + '»'), over ? h('span.k-faint.ss-over', 'перекрыт вашим') : it.hidden ? h('span.k-faint.ss-over', 'скрыт') : null),
+              h('div.ss-bang-url.k-mono', { title: b.url }, b.url)),
+            acts));
+        }
+      }
+      U.on('kosmo:packs.changed', loadPackBangs);
+      loadPackBangs();
 
       let editing = null; // key | '+new'
       const bangs = () => (Array.isArray(api.get('search.bangs')) ? api.get('search.bangs') : []);
@@ -85,8 +127,8 @@
       function form(b, idx) {
         const isNew = idx < 0;
         const f = {
-          key: h('input.k-input.k-mono', { type: 'text', value: b.key || '', placeholder: 'wb', spellcheck: 'false', 'aria-label': 'Ключ' }),
-          name: h('input.k-input', { type: 'text', value: b.name || '', placeholder: 'Wildberries', spellcheck: 'false', 'aria-label': 'Название' }),
+          key: h('input.k-input.k-mono', { type: 'text', value: b.key || '', placeholder: 'gh', spellcheck: 'false', 'aria-label': 'Ключ' }),
+          name: h('input.k-input', { type: 'text', value: b.name || '', placeholder: 'GitHub', spellcheck: 'false', 'aria-label': 'Название' }),
           url: h('input.k-input.k-mono', { type: 'text', value: b.url || '', placeholder: 'https://example.com/search?q={q}', spellcheck: 'false', 'aria-label': 'Адрес поиска' }),
           numericUrl: h('input.k-input.k-mono', { type: 'text', value: b.numericUrl || '', placeholder: 'необязательно: https://example.com/item/{q}', spellcheck: 'false', 'aria-label': 'Адрес для артикула' }),
         };
@@ -162,7 +204,7 @@
           return save(def.concat(own)).then(() => U.toast('Стандартные бэнги восстановлены'));
         }).catch((e) => U.toast(clean(e), { tone: 'danger' }));
       });
-      ui.watch('search.bangs', () => { if (!editing) render(); });
+      ui.watch('search.bangs', () => { if (!editing) render(); renderPack(); });
     },
   });
 })();

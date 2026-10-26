@@ -61,7 +61,7 @@
       const recBtn = D.iconBtn('circle-dot', 'Пауза записи', () => togglePause(), 'kn-rec');
       const clearBtn = D.iconBtn('ban', 'Очистить журнал', () => clearLog());
       const filterIn = h('input.k-input.k-input-sm.kn-filter', {
-        type: 'text', spellcheck: 'false', placeholder: 'Фильтр: текст, status:4xx, method:POST, domain:wb.ru, -исключить',
+        type: 'text', spellcheck: 'false', placeholder: 'Фильтр: текст, status:4xx, method:POST, domain:example.com, -исключить',
         value: st.filterText, 'aria-label': 'Фильтр запросов'
       });
       const filterBox = h('label.k-search.kn-filter-box', U.icon('filter', 14), filterIn);
@@ -402,9 +402,10 @@
         ], anchor);
       }
       function modeItems() {
-        const g = st.info ? st.info.globalMode : 'api';
+        const g = st.info ? st.info.globalMode : 'scoped';
         const set = (m) => api.invoke('kosmo:settings.set', { path: 'devtools.capture', value: m }).then(() => setTimeout(() => watchTab(st.tabId, true), 150)).catch(fail);
         return [
+          { title: 'По пакам — подробно на сайтах паков и здесь', icon: g === 'scoped' ? 'check' : null, onPick: () => set('scoped') },
           { title: 'API — XHR, fetch, документы, WS', icon: g === 'api' ? 'check' : null, onPick: () => set('api') },
           { title: 'Всё — и скрипты, стили, картинки', icon: g === 'all' ? 'check' : null, onPick: () => set('all') },
           { title: 'Выключена', icon: g === 'off' ? 'check' : null, onPick: () => set('off') }

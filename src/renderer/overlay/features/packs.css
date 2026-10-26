@@ -1,0 +1,36 @@
+/* Владелец: packs. Лист прав и разницы пака. */
+.ov-card.kpk-sheet { padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: calc(100vh - 64px); }
+.kpk-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px 12px; }
+.kpk-mark {
+  display: inline-grid; place-items: center; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 11px;
+  background: var(--k-accent-soft); color: var(--k-accent-text);
+  font-weight: 700; font-size: 14px; letter-spacing: 0.02em;
+}
+.kpk-htext { min-width: 0; }
+.kpk-title { font-size: var(--k-fs-lg); font-weight: 600; color: var(--k-text); }
+.kpk-sub { color: var(--k-text-faint); font-size: var(--k-fs-sm); margin-top: 2px; max-width: 360px; }
+.kpk-body { padding: 0 20px 6px; overflow: auto; min-height: 0; }
+.kpk-desc { margin: 0 0 10px; color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.45; }
+.kpk-summary { margin: 0 0 12px; color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kpk-summary.attn { color: var(--k-text); }
+.kpk-groups { display: flex; flex-direction: column; gap: 10px; }
+.kpk-glabel { color: var(--k-text-faint); font-size: var(--k-fs-xs); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.kpk-items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.kpk-item { display: flex; gap: 9px; align-items: baseline; color: var(--k-text); line-height: 1.45; font-size: var(--k-fs); }
+.kpk-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--k-text-ghost, var(--k-border-strong)); transform: translateY(-1px); }
+.kpk-item.attn .kpk-dot { background: var(--k-accent); }
+.kpk-badge {
+  flex-shrink: 0; min-width: 64px; text-align: center;
+  padding: 1px 7px; border-radius: var(--k-radius-pill, 999px);
+  font-size: var(--k-fs-xs); background: var(--k-surface); color: var(--k-text-dim);
+}
+.kpk-item.kind-new .kpk-badge { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.kpk-item.kind-removed { color: var(--k-text-dim); }
+.kpk-item.kind-removed .kpk-badge { color: var(--k-text-faint); }
+.kpk-same { color: var(--k-text-dim); padding: 4px 0 8px; }
+.kpk-more { margin: 12px 0 6px; color: var(--k-text-dim); font-size: var(--k-fs-sm); }
+.kpk-more > summary { cursor: pointer; margin-bottom: 8px; }
+.kpk-foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px 16px; border-top: 1px solid var(--k-border); margin-top: 10px; }
+.kpk-note { flex: 1; color: var(--k-text-faint); font-size: var(--k-fs-xs); line-height: 1.4; }
+.kpk-btns { display: flex; gap: 8px; flex-shrink: 0; }

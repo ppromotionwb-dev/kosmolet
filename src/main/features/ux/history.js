@@ -338,7 +338,7 @@ function createHistory(ctx) {
     _bench(n) {
       // для проверки скорости: n синтетических записей (не сохраняются)
       const saved = data.entries.slice();
-      const words = ['seller', 'wildberries', 'ozon', 'market', 'github', 'claude', 'docs', 'api', 'news', 'shop', 'avito', 'yandex'];
+      const words = ['seller', 'store', 'catalog', 'market', 'github', 'claude', 'docs', 'api', 'news', 'shop', 'portal', 'yandex'];
       const tlds = ['ru', 'com', 'org', 'io', 'net'];
       for (let i = 0; i < n; i++) {
         const host = words[i % words.length] + (i % 97) + '.' + tlds[i % tlds.length];

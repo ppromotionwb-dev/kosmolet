@@ -37,7 +37,7 @@
 
   // ---------- фильтр-строка ----------
   // Слова — подстрока адреса (И), /regex/ — регулярное выражение по адресу, «-» в начале — исключение.
-  // Операторы: status:4xx|404|>=400|failed|pending, method:POST, domain:wb.ru (и *.wb.ru), mime:json,
+  // Операторы: status:4xx|404|>=400|failed|pending, method:POST, domain:example.com (и *.example.com), mime:json,
   // type:api|doc|js|css|img|font|ws|other|xhr…, larger-than:100k. Несколько значений — через запятую.
   function tokenize(s) {
     const out = [];

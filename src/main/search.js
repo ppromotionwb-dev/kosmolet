@@ -49,9 +49,16 @@ function guessUrl(s) {
 function createSearch(ctx) {
   const providers = [];
 
+  // Бэнги — слои «пользователь > пак > ядро»: settings.search.bangs (там же общие бэнги ядра) поверх бэнгов
+  // включённых паков (ctx.packs.bangs(), без скрытых пользователем). Ключ пользователя перекрывает ключ пака.
   function bangs() {
     const b = ctx.settings.peek('search.bangs');
-    return Array.isArray(b) ? b : [];
+    const own = Array.isArray(b) ? b : [];
+    let fromPacks = [];
+    try { fromPacks = ctx.packs ? ctx.packs.bangs() : []; } catch (_) { fromPacks = []; }
+    if (!fromPacks.length) return own;
+    const keys = new Set(own.map((x) => x.key));
+    return own.concat(fromPacks.filter((x) => !keys.has(x.key)));
   }
 
   function engine() {
@@ -85,7 +92,7 @@ function createSearch(ctx) {
         return { url: u.href, kind: 'url' };
       } catch (_) { /* не адрес — поиск ниже */ }
     }
-    // Бэнг: «wb кроссовки», «!g запрос», «oz 123456».
+    // Бэнг: «gh electron», «!g запрос», «<ключ> 123456» (числовой адрес бэнга, если есть).
     const m = s.match(/^!?(\S+)(?:\s+([\s\S]*))?$/);
     if (m) {
       const b = findBang(m[1]);

@@ -108,10 +108,15 @@
       const local = host === 'localhost' || /\.localhost$/.test(host) || /^127\./.test(host) || host === '[::1]';
       return allow.some((e) => e && (host === e || host.endsWith('.' + e) || (e === 'localhost' && local)));
     }
+    // Белый список: свои записи из настроек + исключения паков (итог приходит в статусе блокировщика).
+    let packAllow = [];
     function readSettings(s) {
       const p = (s && s.privacy) || {};
       status.enabled = p.adblock !== false;
-      allow = (Array.isArray(p.adblockAllow) ? p.adblockAllow : []).map(norm).filter(Boolean);
+      allow = (Array.isArray(p.adblockAllow) ? p.adblockAllow : []).map(norm).filter(Boolean).concat(packAllow);
+    }
+    function takeStatus(s) {
+      if (s && Array.isArray(s.allowList)) { packAllow = s.allowList.map(norm).filter(Boolean); readSettings(K.state.settings); }
     }
 
     let lastKey = '';
@@ -142,7 +147,7 @@
       for (const k of Object.keys(p.changes)) counts.set(String(k), Number(p.changes[k]) || 0);
       render();
     });
-    U.on('kosmo:adblock.status', (s) => { if (s) { status = Object.assign(status, s); render(); } });
+    U.on('kosmo:adblock.status', (s) => { if (s) { takeStatus(s); status = Object.assign(status, s); render(); } });
     K.on('settings', (s) => { readSettings(s); render(); });
     K.on('state', (st) => {
       const ids = new Set((st && st.tabs || []).map((t) => String(t.id)));
@@ -156,7 +161,7 @@
         if (p && p.changes) for (const k of Object.keys(p.changes)) counts.set(String(k), Number(p.changes[k]) || 0);
         render();
       }).catch(() => {});
-      K.invoke('kosmo:adblock.state', {}).then((s) => { if (s) { status = Object.assign(status, s); render(); } }).catch(() => {});
+      K.invoke('kosmo:adblock.state', {}).then((s) => { if (s) { takeStatus(s); status = Object.assign(status, s); render(); } }).catch(() => {});
     };
     if (K.ready && K.ready.then) K.ready.then(load); else load();
     render();
@@ -166,10 +171,13 @@
   // =====================================================================
   // Чип контейнера в адресной строке
   // =====================================================================
+  // С метаданными (scope с паком и шаблоном label): марка в цвете контейнера, «поле · поле», тихим текстом аккаунт.
   (function () {
     const dot = h('span.kp-cdot');
+    const mark = h('span.kp-cmark', { hidden: true });
     const name = h('span.kp-cname.k-ellipsis');
-    const chip = h('button.kp-container', { type: 'button', tabindex: '-1', hidden: true, dataset: { order: '1000', id: 'container' } }, dot, name);
+    const account = h('span.kp-cacc.k-ellipsis', { hidden: true });
+    const chip = h('button.kp-container', { type: 'button', tabindex: '-1', hidden: true, dataset: { order: '1000', id: 'container' } }, dot, mark, name, account);
     const slot = K.slot('omnibox-right');
     const next = Array.from(slot.children).find((c) => Number(c.dataset.order || 500) > 1000);
     slot.insertBefore(chip, next || null);
@@ -178,17 +186,30 @@
       K.fire('kosmo:containers.chipMenu', { x: Math.round(r.left), y: Math.round(r.bottom + 4) });
     });
     let key = '';
+    const ACCESS = { off: 'агенту закрыт', read: 'агент только читает', ops: 'агент пишет только через операции', full: 'полный доступ агента' };
     function render() {
       const a = K.activeTab();
-      const show = !!(a && a.containerId && a.containerId !== 'main');
-      const k = show ? [a.containerId, a.containerName, a.containerColor, a.containerTemp].join('|') : '';
+      const sc = a && a.containerChip;
+      const show = !!(a && ((a.containerId && a.containerId !== 'main') || sc));
+      const k = show ? [a.containerId, a.containerName, a.containerColor, a.containerTemp, sc ? [sc.mark, sc.label, sc.account, sc.access, sc.health].join('~') : ''].join('|') : '';
       if (k === key) return;
       key = k;
       chip.hidden = !show;
       if (!show) return;
       chip.style.setProperty('--kp-c', a.containerColor || 'var(--k-accent)');
-      name.textContent = a.containerName || a.containerId;
       chip.classList.toggle('temp', !!a.containerTemp);
+      chip.classList.toggle('scoped', !!sc);
+      dot.hidden = !!sc;
+      mark.hidden = !sc;
+      account.hidden = !(sc && sc.account);
+      if (sc) {
+        mark.textContent = sc.mark || '';
+        name.textContent = sc.label;
+        account.textContent = sc.account || '';
+        chip.title = 'Контейнер «' + (a.containerName || a.containerId) + '»: ' + sc.label + (sc.account ? ' · ' + sc.account : '') + '. ' + (ACCESS[sc.access] || '') + (sc.protect ? ', секреты скрыты' : '');
+        return;
+      }
+      name.textContent = a.containerName || a.containerId;
       chip.title = a.containerTemp
         ? 'Изолированная вкладка «' + (a.containerName || a.containerId) + '»: свои cookies и вход; удалится с последней вкладкой — «Оставить» в меню'
         : 'Контейнер «' + (a.containerName || a.containerId) + '»: свои cookies и вход на сайты';

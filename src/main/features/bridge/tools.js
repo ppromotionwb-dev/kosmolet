@@ -15,8 +15,8 @@ const INSTRUCTIONS = [
   'Site memory: Космолёт records every site\'s API endpoints as you and the user browse (site_api_catalog -> site_api_endpoint: params, JSON schemas, needed headers, which button triggers it) and keeps your own notes per site (site_notes / site_note_add, allowed even in read mode). Before working on a site, check its catalog and notes first; when an endpoint returns the data or performs the action you need, prefer a direct page_fetch over clicking through the UI (use clicks when the flow needs the UI, e.g. captchas or multi-step forms). Save durable findings (working endpoints, quirks, where things are) with site_note_add.',
   'request_initiator and recent_actions tell which user/Claude action and which JS code caused a request.',
   'picked_element returns the element the user pointed at with the picker (Ctrl+Shift+E).',
-  'Containers isolate logins: each has its own cookies, storage and cache. To work in several accounts of one site (e.g. different seller cabinets of one marketplace) at once, use one container per account: tab_open with isolated=true (new container) or container=<id>; containers_list shows them, container_create makes a lasting one. Tabs opened by a page stay in its container.',
-  'The user sets the access mode: read = only reading tools, full = everything.',
+  'Containers isolate logins: each has its own cookies, storage and cache. To work in several accounts of one site (e.g. two admin accounts of the same service) at once, use one container per account: tab_open with isolated=true (new container) or container=<id>; containers_list shows them, container_create makes a lasting one. Tabs opened by a page stay in its container.',
+  'The user sets the access mode: read = only reading tools, full = everything. Each container can lower it further (containers_list shows "agent: …"): off = no access; read = snapshot, screenshot, network, navigation by URL and GET page_fetch only; ops = the same, writes only through pack operations (op_run). In protected containers secrets (auth headers, HttpOnly cookies) are masked.',
 ].join('\n');
 
 function clip(s, n) {
@@ -88,12 +88,40 @@ const SERIALIZER = `function (v) {
   return s === undefined ? 'undefined' : s;
 }`;
 
+// Доступ агента по контейнеру (scope.agentAccess, решение консилиума 4.2): глобальный режим — потолок, контейнер может
+// только понизить. read/ops: эти инструменты запрещены (page_fetch — если метод не GET/HEAD); off — все, что адресуют
+// вкладку или контейнер. op_run (запись через операции пака) появится на следующем этапе.
+const CONTAINER_WRITE = new Set(['click', 'type', 'press_key', 'select_option', 'hover', 'eval_js', 'cookies_set']);
+// Секреты в защищённых контейнерах (scope.protect): значения заголовков авторизации и HttpOnly-cookie не отдаются.
+const AUTH_HEADER_RE = /^(authorization|proxy-authorization|cookie|set-cookie)$|token|secret|session|csrf|xsrf|api[-_]?key|auth/i;
+function maskHeaders(h) {
+  const out = {};
+  for (const [k, v] of Object.entries(h || {})) out[k] = AUTH_HEADER_RE.test(k) ? `‹secret header:${k}›` : v;
+  return out;
+}
+
 // Тёмная тема Космолёта (движок Dark Reader) перекрашивает сайт — Claude не должен судить по этим цветам о CSS сайта.
 const THEME_NOTE = "Note: the browser's dark site theme (Dark Reader) is ON for this page — colors, backgrounds and computed styles are recolored by the browser, not the site's own CSS. Ask the user to turn it off (moon icon in the address bar) before judging the site's colors.";
 
 function createTools(ctx, deps) {
   const { actions: A, activity, picker, getAccess } = deps;
   let defs = null;
+
+  const agentAccessOf = (cid) => { try { return ctx.scopes ? ctx.scopes.agentAccess(cid) : 'full'; } catch (_) { return 'full'; } };
+  const isProtected = (cid) => { try { return !!(ctx.scopes && ctx.scopes.isProtected(cid)); } catch (_) { return false; } };
+  // Проверка инструмента d с аргументами args для контейнера cid (бросает понятный отказ).
+  function guardContainer(d, cid, args) {
+    const acc = agentAccessOf(cid);
+    if (acc === 'full') return;
+    const c = ctx.sessions.container(cid);
+    const label = `"${c.name}" [${cid}]`;
+    if (acc === 'off') throw new Error(`Blocked: agent access to container ${label} is off. Ask the user to allow it (Settings → Containers → agent access).`);
+    let write = CONTAINER_WRITE.has(d.name);
+    if (d.name === 'page_fetch') { const m = String((args && args.method) || 'GET').toUpperCase(); write = m !== 'GET' && m !== 'HEAD'; }
+    if (!write) return;
+    if (acc === 'ops') throw new Error(`Blocked: container ${label} is ops-only: use op_run. In this container the agent cannot click, type, press keys, hover, run JS, send non-GET requests or set cookies; snapshot, screenshot, network, navigation by URL and GET page_fetch still work. Writes go through pack operations with the user's approval.`);
+    throw new Error(`Blocked: container ${label} is read-only for the agent (agent access "read"): ${d.name} is not allowed. Only snapshot, screenshot, network, navigation by URL and GET page_fetch work here.`);
+  }
 
   function result(r) {
     if (r && typeof r === 'object' && Array.isArray(r.content)) return r;
@@ -106,7 +134,9 @@ function createTools(ctx, deps) {
     const call = {
       tabId: null,
       logArgs: args,
-      tab(t) { call.tabId = t.id; try { ctx.tabs.markClaude(t.id); } catch (_) { /* закрыта */ } return t; },
+      // доступ агента к контейнеру вкладки проверяется здесь: все инструменты вкладок проходят через call.tab
+      tab(t) { guardContainer(d, t.info.containerId, args || {}); call.tabId = t.id; try { ctx.tabs.markClaude(t.id); } catch (_) { /* закрыта */ } return t; },
+      container(cid) { guardContainer(d, cid, args || {}); return cid; },
     };
     let res;
     let err = null;
@@ -141,6 +171,8 @@ function createTools(ctx, deps) {
   function tabLine(t) {
     const flags = [];
     if (t.containerId && t.containerId !== 'main') flags.push(`container ${t.containerName || t.containerId} [${t.containerId}]${t.containerTemp ? ' temporary' : ''}`);
+    const acc = agentAccessOf(t.containerId || 'main');
+    if (acc !== 'full') flags.push(`agent: ${acc}`);
     if (t.loading) flags.push('loading');
     if (t.discarded) flags.push('unloaded');
     if (t.pinned) flags.push('pinned');
@@ -224,11 +256,12 @@ function createTools(ctx, deps) {
     return `#${it.index} ${it.method} ${it.host} ${clip(readableUrl(it.path + it.query), 260)} ×${it.count}, last ${ago(it.last)}${it.auth ? ', auth: ' + it.auth : ''}${st.length ? ', also status ' + st.join('/') : ''}${by}`;
   }
 
-  function sessionFor(args) {
+  function sessionFor(args, call) {
     let containerId = 'main';
     if (args.tabId != null) containerId = A.getTab(args.tabId).info.containerId;
     else if (args.container) containerId = resolveContainer(args.container);
     else { const a = ctx.tabs.active(); if (a) containerId = a.info.containerId; }
+    if (call) call.container(containerId);
     return { ses: ctx.sessions.get(containerId), containerId };
   }
 
@@ -273,7 +306,11 @@ function createTools(ctx, deps) {
           const tabs = ctx.tabs.list();
           const lines = ctx.sessions.containers().map((c) => {
             const own = tabs.filter((t) => t.containerId === c.id);
-            return `[${c.id}] ${c.name}${c.id === 'main' ? ' (default)' : ''}${c.temp ? ' (temporary: deleted with its last tab)' : ''} — ${own.length} tab(s)${own.length ? ': ' + own.map((t) => t.id).join(', ') : ''}`;
+            const chip = ctx.scopes ? ctx.scopes.chip(c.id) : null;
+            const meta = [`agent: ${agentAccessOf(c.id)}`];
+            if (isProtected(c.id)) meta.push('protected');
+            if (chip) meta.push(chip.label + (chip.account ? ' · ' + chip.account : ''));
+            return `[${c.id}] ${c.name}${c.id === 'main' ? ' (default)' : ''}${c.temp ? ' (temporary: deleted with its last tab)' : ''} — ${own.length} tab(s)${own.length ? ': ' + own.map((t) => t.id).join(', ') : ''}; ${meta.join(', ')}`;
           });
           return `${lines.length} containers:\n${lines.join('\n')}`;
         },
@@ -434,13 +471,15 @@ function createTools(ctx, deps) {
           const e = await ctx.cdp.entry(tab.id, id);
           if (!e) throw new Error(`request #${id} not found in tab [${tab.id}] (the log may have been cleared); list them with network_requests`);
           const max = args.maxChars || 20000;
-          const hdr = (h) => Object.entries(h || {}).map(([k, v]) => `  ${k}: ${clip(v, 2000)}`).join('\n') || '  (none)';
+          const prot = isProtected(tab.info.containerId);
+          const hdr = (h) => Object.entries(prot ? maskHeaders(h) : h || {}).map(([k, v]) => `  ${k}: ${clip(v, 2000)}`).join('\n') || '  (none)';
           const out = [
             `${e.method} ${e.url}`,
             `Status: ${e.failed ? 'failed — ' + (e.errorText || '') : (e.status || '—') + ' ' + (e.statusText || '')}${e.pending ? ' (pending)' : ''}`,
             `Type: ${e.type || ''} ${e.mime || ''}, size ${fmtBytes(e.size)}, time ${e.timeMs != null ? Math.round(e.timeMs) + ' ms' : '—'}${e.fromCache ? ', from cache' : ''}`,
             `Request headers${e.provisionalHeaders ? ' (provisional)' : ''}:\n${hdr(e.requestHeaders)}`,
           ];
+          if (prot) out.push('(protected container: values of auth headers and cookies are hidden)');
           if (e.postData) out.push(`Request body:\n${truncNote(String(e.postData), Math.min(max, 20000))}`);
           out.push(`Response headers:\n${hdr(e.responseHeaders)}`);
           if (args.body !== false && !e.failed && !e.pending) {
@@ -511,9 +550,9 @@ function createTools(ctx, deps) {
       // ===== знания о сайтах (site-intel) =====
       {
         name: 'site_api_catalog', access: READ,
-        description: 'API endpoints this browser has seen the site call (collected automatically across sessions, all tabs and containers): method, host, path template ({id}, {uuid}, {hash}, {token} replace ids), query template, call count, auth kind, and which button/action triggers it. Default: the site of the active tab. Then use site_api_endpoint with #index for params, schemas and a ready page_fetch call. Example: {} or {"site": "wildberries.ru", "filter": "search", "method": "GET"}',
+        description: 'API endpoints this browser has seen the site call (collected automatically across sessions, all tabs and containers): method, host, path template ({id}, {uuid}, {hash}, {token} replace ids), query template, call count, auth kind, and which button/action triggers it. Default: the site of the active tab. Then use site_api_endpoint with #index for params, schemas and a ready page_fetch call. Example: {} or {"site": "example.com", "filter": "search", "method": "GET"}',
         input: {
-          site: z.string().optional().describe('Site (registrable domain or any URL/host of it), e.g. "wildberries.ru"'),
+          site: z.string().optional().describe('Site (registrable domain or any URL/host of it), e.g. "example.com"'),
           tabId,
           filter: z.string().optional().describe('Substring of path, host, param name or action label'),
           method: z.string().optional().describe('Only this HTTP method'),
@@ -532,7 +571,7 @@ function createTools(ctx, deps) {
       },
       {
         name: 'site_api_endpoint', access: READ,
-        description: 'Full card of one recorded endpoint: query params with sample values (secrets masked), request and response JSON schemas (TypeScript-like, keys and types only), notable request headers (names only), auth kind, triggering actions, JS initiators, the latest captured request id (if still in the buffer) and a ready page_fetch call. Example: {"index": 1} or {"site": "wildberries.ru", "key": "GET www.wildberries.ru/__internal/u-search/exactmatch/ru/common/v18/search"}',
+        description: 'Full card of one recorded endpoint: query params with sample values (secrets masked), request and response JSON schemas (TypeScript-like, keys and types only), notable request headers (names only), auth kind, triggering actions, JS initiators, the latest captured request id (if still in the buffer) and a ready page_fetch call. Example: {"index": 1} or {"site": "example.com", "key": "GET api.example.com/v2/search"}',
         input: {
           site: z.string().optional().describe('Site; default: the active tab\'s site'),
           tabId,
@@ -631,7 +670,7 @@ function createTools(ctx, deps) {
       },
       {
         name: 'site_notes', access: READ,
-        description: 'Your saved notes about a site (your memory between sessions; the user can add and edit them too). Default: the active tab\'s site. Example: {} or {"site": "ozon.ru"}',
+        description: 'Your saved notes about a site (your memory between sessions; the user can add and edit them too). Default: the active tab\'s site. Example: {} or {"site": "example.com"}',
         input: { site: z.string().optional().describe('Site; default: the active tab\'s site'), tabId },
         annotations: { readOnlyHint: true },
         async run(args, call) {
@@ -644,7 +683,7 @@ function createTools(ctx, deps) {
       },
       {
         name: 'site_note_add', access: READ,
-        description: 'Save a note about a site for future sessions (working endpoints, required headers, quirks, where things are). Allowed in read mode: it is your own memory and does not change the browser or the site. Max 2000 chars. Example: {"text": "Search: GET /__internal/u-search/... needs x-wbaas-token; page=N for pagination", "tags": ["api", "search"]}',
+        description: 'Save a note about a site for future sessions (working endpoints, required headers, quirks, where things are). Allowed in read mode: it is your own memory and does not change the browser or the site. Max 2000 chars. Example: {"text": "Search: GET /api/v2/search needs x-api-token from the page; page=N for pagination", "tags": ["api", "search"]}',
         input: {
           site: z.string().optional().describe('Site; default: the active tab\'s site'),
           tabId,
@@ -679,7 +718,7 @@ function createTools(ctx, deps) {
       // ===== действия =====
       {
         name: 'tab_open', access: FULL,
-        description: 'Open a URL (or search text) in a new tab and wait for it to load. container = container id or name for a separate login (cookies); isolated = open in a brand-new empty container (temporary unless keep=true). Example: {"url": "https://www.wildberries.ru", "background": false} or {"url": "https://seller.wildberries.ru", "isolated": true, "containerName": "WB кабинет 2", "keep": true}',
+        description: 'Open a URL (or search text) in a new tab and wait for it to load. container = container id or name for a separate login (cookies); isolated = open in a brand-new empty container (temporary unless keep=true). Example: {"url": "https://example.com", "background": false} or {"url": "https://admin.example.com", "isolated": true, "containerName": "Admin 2", "keep": true}',
         input: {
           url: z.string().describe('URL or search query'),
           container: z.string().optional().describe('Container id or name (default: main)'),
@@ -701,6 +740,7 @@ function createTools(ctx, deps) {
             note = ` in new ${args.keep ? '' : 'temporary '}container "${r.container.name}" [${r.container.id}]`;
           } else {
             const containerId = resolveContainer(args.container);
+            call.container(containerId || 'main');
             t = call.tab(ctx.tabs.create({ url, containerId, active: !args.background }));
           }
           if (args.wait !== false) { await A.sleep(200); await A.waitLoad(t, 20000); }
@@ -713,7 +753,7 @@ function createTools(ctx, deps) {
       },
       {
         name: 'container_create', access: FULL,
-        description: 'Create a new empty container (separate login) and return its id, e.g. one per marketplace account. Lasting by default; temporary=true deletes it with its last tab. Example: {"name": "Ozon кабинет 2"}',
+        description: 'Create a new empty container (separate login) and return its id, e.g. one per account of a site. Lasting by default; temporary=true deletes it with its last tab. Example: {"name": "Admin 2"}',
         input: {
           name: z.string().optional().describe('Container name (default: auto)'),
           color: z.string().optional().describe('Color #rrggbb (default: auto)'),
@@ -747,6 +787,7 @@ function createTools(ctx, deps) {
         annotations: { destructiveHint: true },
         async run(args, call) {
           const t = A.getTab(args.tabId);
+          call.container(t.info.containerId);
           call.tabId = t.id;
           const url = t.info.url;
           ctx.tabs.close(t.id);
@@ -801,7 +842,7 @@ function createTools(ctx, deps) {
           if (loc.disabled) warn.push('Note: the element looks disabled.');
           if (!loc.hit && loc.cover) warn.push(`Warning: another element covers it: ${loc.cover} — the click may land there.`);
           const waitMs = Math.max(0, Math.min(60000, args.waitMs != null ? args.waitMs : 10000));
-          // Ссылка на другой адрес того же сайта: SPA (WB и т.п.) меняет адрес через history позже — ждём дольше.
+          // Ссылка на другой адрес того же сайта: SPA (тяжёлые магазины и т.п.) меняет адрес через history позже — ждём дольше.
           let spaLink = false;
           try {
             const cur = new URL(tab.wc.getURL());
@@ -1079,7 +1120,7 @@ function createTools(ctx, deps) {
           call.logArgs = Object.assign({}, args, { body: args.body ? clip(args.body, 120) : undefined });
           const r = await A.pageFetch(tab.id, { url: args.url, method: args.method, headers: args.headers, body: args.body, credentials: args.credentials, timeoutMs: args.timeoutMs });
           if (r.error && !r.status) throw new Error('fetch failed: ' + r.error);
-          const h = r.headers || {};
+          const h = isProtected(tab.info.containerId) ? maskHeaders(r.headers) : r.headers || {};
           const keep = ['content-type', 'content-length', 'location', 'set-cookie', 'cache-control', 'x-request-id'];
           const hl = keep.filter((k) => h[k] != null).map((k) => `${k}: ${clip(h[k], 300)}`);
           const body = r.base64Encoded ? `(binary, ${fmtBytes(r.size)}, base64 not shown)` : truncNote(String(r.body || ''), args.maxChars || 20000);
@@ -1088,7 +1129,7 @@ function createTools(ctx, deps) {
       },
       {
         name: 'cookies_get', access: FULL,
-        description: 'Cookies of the tab\'s container for a URL or domain (default: the tab\'s URL), including HttpOnly. Example: {"domain": "wildberries.ru"} or {"url": "https://www.ozon.ru", "name": "__Secure-access-token"}',
+        description: 'Cookies of the tab\'s container for a URL or domain (default: the tab\'s URL), including HttpOnly. Example: {"domain": "example.com"} or {"url": "https://www.example.com", "name": "session_id"}',
         input: {
           tabId,
           url: z.string().optional().describe('URL whose cookies to read'),
@@ -1097,7 +1138,8 @@ function createTools(ctx, deps) {
           container: z.string().optional().describe('Container id/name instead of a tab'),
         },
         async run(args, call) {
-          const { ses, containerId } = sessionFor(args);
+          const { ses, containerId } = sessionFor(args, call);
+          const prot = isProtected(containerId);
           const filter = {};
           if (args.url) filter.url = args.url;
           else if (args.domain) filter.domain = String(args.domain).replace(/^\./, '');
@@ -1112,9 +1154,10 @@ function createTools(ctx, deps) {
             if (c.httpOnly) bits.push('HttpOnly');
             if (c.secure) bits.push('Secure');
             if (c.sameSite && c.sameSite !== 'unspecified') bits.push('SameSite=' + c.sameSite);
-            return `${c.name}=${clip(c.value, 400)}; ${bits.join('; ')}`;
+            const value = prot && c.httpOnly ? `‹secret cookie:${c.name}›` : clip(c.value, 400);
+            return `${c.name}=${value}; ${bits.join('; ')}`;
           });
-          return `${list.length} cookie(s), container ${containerId}:\n${lines.join('\n')}`;
+          return `${list.length} cookie(s), container ${containerId}${prot ? ' (protected: HttpOnly values hidden)' : ''}:\n${lines.join('\n')}`;
         },
       },
       {
@@ -1131,7 +1174,7 @@ function createTools(ctx, deps) {
           container: z.string().optional().describe('Container id/name instead of a tab'),
         },
         async run(args, call) {
-          const { ses, containerId } = sessionFor(args);
+          const { ses, containerId } = sessionFor(args, call);
           if (args.tabId != null) call.tab(A.getTab(args.tabId));
           call.logArgs = Object.assign({}, args, { value: '•••' });
           const d = { url: args.url, name: args.name, value: args.value };

@@ -15,7 +15,7 @@ function clip(s, n) { s = String(s == null ? '' : s); return s.length > n ? s.sl
 // ---------- сайт ----------
 const isIp = (h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':') || h.startsWith('[');
 
-// Регистрируемый домен: seller.wildberries.ru → wildberries.ru; IP и localhost — как есть.
+// Регистрируемый домен: seller.example.com → example.com; IP и localhost — как есть.
 function siteOf(hostOrUrl) {
   let h = String(hostOrUrl || '').trim().toLowerCase();
   if (/^[a-z][a-z0-9+.-]*:\/\//.test(h)) { try { h = new URL(h).hostname; } catch (_) { return ''; } }

@@ -250,50 +250,6 @@ const LIB = [
     },
   },
   {
-    id: 'lib-wb-nm', name: 'WB: артикулы на странице', world: 'isolated',
-    desc: 'nmId из ссылок /catalog/<id>/detail.aspx, с количеством',
-    fn: async function () {
-      // Артикулы Wildberries (nmId) из ссылок /catalog/<id>/detail.aspx и карточек товаров.
-      // «Раз» — сколько раз артикул встречается. Товары в поиске подгружаются при прокрутке.
-      const ids = new Map();
-      const add = (id, title) => {
-        const r = ids.get(id);
-        if (r) { r.n++; if (title.length > r.title.length) r.title = title; } else ids.set(id, { n: 1, title });
-      };
-      for (const a of document.querySelectorAll('a[href*="/catalog/"]')) {
-        const m = /\/catalog\/(\d{4,})\/detail\.aspx/.exec(a.href);
-        if (m) add(m[1], (a.getAttribute('aria-label') || a.title || a.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 150));
-      }
-      for (const el of document.querySelectorAll('[data-nm-id]')) {
-        const id = el.getAttribute('data-nm-id');
-        if (/^\d{4,}$/.test(id) && !ids.has(id)) add(id, '');
-      }
-      const rows = [...ids].map(([id, r]) => [id, r.n, r.title, 'https://www.wildberries.ru/catalog/' + id + '/detail.aspx']);
-      if (!rows.length) return 'Артикулов WB не найдено. Откройте поиск или каталог Wildberries и прокрутите страницу.';
-      return { __kosmo: 'table', title: 'Артикулов: ' + rows.length, columns: ['nmId', 'Раз', 'Название', 'Ссылка'], rows, copyColumn: 0 };
-    },
-  },
-  {
-    id: 'lib-ozon-sku', name: 'Ozon: SKU на странице', world: 'isolated',
-    desc: 'SKU из ссылок /product/…-<id>/, с количеством',
-    fn: async function () {
-      // SKU Ozon из ссылок /product/<название>-<sku>/. «Раз» — сколько раз SKU встречается на странице.
-      const ids = new Map();
-      for (const a of document.querySelectorAll('a[href*="/product/"]')) {
-        let u;
-        try { u = new URL(a.href); } catch (e) { continue; }
-        const m = /\/product\/(?:[^/]*-)?(\d{5,})\/?$/.exec(u.pathname);
-        if (!m) continue;
-        const title = (a.innerText || a.getAttribute('aria-label') || a.title || '').replace(/\s+/g, ' ').trim().slice(0, 150);
-        const r = ids.get(m[1]);
-        if (r) { r.n++; if (title.length > r.title.length) r.title = title; } else ids.set(m[1], { n: 1, title, url: u.origin + u.pathname });
-      }
-      const rows = [...ids].map(([id, r]) => [id, r.n, r.title, r.url]);
-      if (!rows.length) return 'SKU Ozon не найдено. Откройте поиск или каталог Ozon и прокрутите страницу.';
-      return { __kosmo: 'table', title: 'SKU: ' + rows.length, columns: ['SKU', 'Раз', 'Название', 'Ссылка'], rows, copyColumn: 0 };
-    },
-  },
-  {
     id: 'lib-localstorage', name: 'localStorage в JSON', world: 'isolated',
     desc: 'Всё содержимое localStorage сайта деревом',
     fn: async function () {
