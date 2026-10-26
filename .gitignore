@@ -4,3 +4,4 @@ tools/selftest-out/
 tools/dev-out/
 claude-inbox/
 *.log
+docs/private/
