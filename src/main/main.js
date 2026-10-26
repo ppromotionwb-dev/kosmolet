@@ -7,7 +7,7 @@ const electron = require('electron');
 const { app, protocol } = electron;
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const FEATURES = ['platform', 'themes', 'cdp-hub', 'devtools', 'ux-chrome', 'claude-bridge', 'claude-terminal', 'tools-pack'];
+const FEATURES = ['platform', 'themes', 'cdp-hub', 'devtools', 'site-intel', 'ux-chrome', 'claude-bridge', 'claude-terminal', 'tools-pack'];
 const URL_ARG_RE = /^(https?|kosmo|file|about|view-source):/i;
 
 // ---------- флаги ----------

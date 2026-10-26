@@ -1,0 +1,97 @@
+/* Владелец: site-intel. Инструмент панели «Сайт». */
+
+.tool-body.si { overflow: hidden; display: flex; flex-direction: column; }
+.si-head { border-bottom: 1px solid var(--k-border); }
+.si-forget { gap: 5px; color: var(--k-text-dim); }
+.si-forget.armed, .si-del.armed { color: var(--k-danger); background: var(--k-danger-soft); }
+
+.si-bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--k-border); flex-shrink: 0; }
+.si-bar[hidden] { display: none; }
+.si-seg > button { padding: 0 10px; font-size: var(--k-fs-sm); }
+.si-seg-n { color: var(--k-text-faint); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; }
+.si-seg-n:empty { display: none; }
+.si-filter { flex: 1; min-width: 0; }
+.si-filter[hidden] { display: none; }
+
+.si-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 6px 8px 20px; transition: opacity var(--k-dur) var(--k-ease); }
+.si-body.busy { opacity: 0.6; }
+.si-loading { display: grid; place-items: center; padding: 40px 0; }
+.si-note { display: flex; align-items: flex-start; gap: 8px; margin: 4px 4px 8px; padding: 7px 10px; border-radius: var(--k-radius-sm); background: var(--k-surface); color: var(--k-text-dim); font-size: var(--k-fs-sm); line-height: 1.45; }
+.si-note > .k-ic { margin-top: 2px; flex-shrink: 0; color: var(--k-text-faint); }
+.si-faint { color: var(--k-text-faint); font-size: var(--k-fs-sm); line-height: 1.45; }
+
+/* список эндпоинтов */
+.si-list { display: flex; flex-direction: column; }
+.si-row { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 7px 8px; border-radius: var(--k-radius-sm); text-align: left; color: var(--k-text); }
+.si-row:hover { background: var(--k-surface-hover); }
+.si-row:focus-visible { outline: 2px solid var(--k-focus); outline-offset: -2px; }
+.si-row + .si-row { border-top: 1px solid var(--k-border); }
+.si-row-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.si-method {
+  flex-shrink: 0; min-width: 40px; padding: 0 4px; border-radius: 4px;
+  font-family: var(--k-mono); font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  background: var(--k-surface); color: var(--k-text-dim);
+}
+.si-method[data-m="GET"] { background: var(--k-ok-soft); color: var(--k-ok); }
+.si-method[data-m="POST"] { background: var(--k-accent-soft); color: var(--k-accent-text); }
+.si-method[data-m="PUT"], .si-method[data-m="PATCH"] { background: var(--k-warn-soft); color: var(--k-warn); }
+.si-method[data-m="DELETE"] { background: var(--k-danger-soft); color: var(--k-danger); }
+.si-path {
+  flex: 1; min-width: 0; font-size: 12px; line-height: 17px; word-break: break-all;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.si-host { flex: 0 1 auto; min-width: 40px; max-width: 45%; }
+.si-q { color: var(--k-text-faint); }
+.si-count { flex-shrink: 0; color: var(--k-text-dim); font-size: var(--k-fs-xs); font-variant-numeric: tabular-nums; }
+.si-row-sub { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 48px; color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.si-when, .si-auth { white-space: nowrap; }
+.si-auth { overflow: hidden; text-overflow: ellipsis; }
+.si-acts { display: inline-flex; gap: 4px; min-width: 0; overflow: hidden; }
+.si-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.si-chip {
+  display: inline-flex; align-items: center; max-width: 220px; padding: 0 7px; height: 20px;
+  border-radius: var(--k-radius-pill); background: var(--k-surface); color: var(--k-text-dim);
+  font-size: var(--k-fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.si-chip b { font-weight: 600; color: var(--k-text); margin-left: 2px; }
+.si-src { color: var(--k-text-faint); }
+
+/* карточка эндпоинта */
+.si-card { padding: 2px 4px; user-select: text; }
+.si-card-head { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 10px; border-bottom: 1px solid var(--k-border); }
+.si-card-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.si-card-path { min-width: 0; overflow-wrap: anywhere; font-size: 12.5px; font-weight: 600; }
+.si-card-meta { color: var(--k-text-faint); font-size: var(--k-fs-xs); padding-left: 48px; }
+.si-card-actions { display: flex; align-items: center; gap: 6px; }
+.si-back { margin-left: -6px; }
+.si-sec { padding: 10px 0 4px; }
+.si-sec + .si-sec { border-top: 1px solid var(--k-border); }
+.si-sec-title { margin-bottom: 6px; }
+.si-mono {
+  margin: 0; padding: 8px 10px; max-height: 320px; overflow: auto;
+  border-radius: var(--k-radius-sm); background: var(--k-bg-sunken); color: var(--k-text-dim);
+  font-family: var(--k-mono); font-size: 11.5px; line-height: 1.55; white-space: pre; tab-size: 2;
+}
+.si-table { width: 100%; border-collapse: collapse; font-size: var(--k-fs-sm); }
+.si-table th { text-align: left; font-weight: 500; color: var(--k-text-faint); font-size: var(--k-fs-xs); padding: 2px 6px 4px 0; }
+.si-table td { padding: 4px 6px 4px 0; vertical-align: top; border-top: 1px solid var(--k-border); }
+.si-table td.k-mono { font-size: 12px; white-space: nowrap; }
+.si-ex { color: var(--k-text-dim); overflow-wrap: anywhere; }
+.si-flags { white-space: nowrap; text-align: right; }
+.si-flag { color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.si-kv { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; font-size: var(--k-fs-sm); }
+.si-k { flex: 0 0 96px; color: var(--k-text-faint); }
+
+/* заметки */
+.si-note-form { display: flex; flex-direction: column; gap: 6px; padding: 4px 4px 10px; border-bottom: 1px solid var(--k-border); }
+.si-note-text { width: 100%; height: auto; min-height: 64px; padding: 7px 10px; resize: vertical; line-height: 1.45; }
+.si-note-form-row { display: flex; align-items: center; gap: 6px; }
+.si-tags { flex: 1; min-width: 0; }
+.si-notes { display: flex; flex-direction: column; padding-top: 4px; }
+.si-note-item { padding: 8px 4px; display: flex; flex-direction: column; gap: 6px; }
+.si-note-item + .si-note-item { border-top: 1px solid var(--k-border); }
+.si-note-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--k-text-faint); font-size: var(--k-fs-xs); }
+.si-author { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--k-text-dim); }
+.si-author[data-author="claude"] { color: var(--k-accent-text); }
+.si-tag { padding: 0 6px; border-radius: var(--k-radius-pill); background: var(--k-surface); }
+.si-note-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; user-select: text; }

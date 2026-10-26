@@ -1,0 +1,10 @@
+/* Владелец: site-intel. Группа «Знания о сайтах» в разделе «Инструменты разработчика». */
+.ksi-exclude { width: 100%; height: auto; min-height: 64px; padding: 7px 10px; resize: vertical; line-height: 1.45; }
+.ksi-sites { display: flex; flex-direction: column; }
+.ksi-total { padding: 2px 0 6px; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.ksi-empty { padding: 4px 0; color: var(--k-text-faint); font-size: var(--k-fs-sm); }
+.ksi-site { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.ksi-site + .ksi-site { border-top: 1px solid var(--k-border); }
+.ksi-site-text { flex: 1; min-width: 0; }
+.ksi-site-name { font-weight: 500; }
+.ksi-site-sub { color: var(--k-text-faint); font-size: var(--k-fs-xs); }

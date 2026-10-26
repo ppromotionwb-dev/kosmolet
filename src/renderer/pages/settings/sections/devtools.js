@@ -56,5 +56,8 @@ KSettings.section({
     ui.watch('devtools.remoteDebuggingPort', refresh);
     api.invoke('kosmo:devtools.info').then((r) => { info = r; refresh(); }).catch(() => {});
 
+    // знания о сайтах (фича site-intel, sections/site-intel.js)
+    if (window.KSiteIntelSettings) { try { window.KSiteIntelSettings.render(el, api); } catch (e) { console.error('[settings] site-intel', e); } }
+
   }
 });

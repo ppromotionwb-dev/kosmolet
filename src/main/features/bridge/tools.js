@@ -12,6 +12,8 @@ const INSTRUCTIONS = [
   'Typical loop: snapshot -> act by ref (click/type/select_option) -> snapshot again. Refs like e12 come from snapshot/find/picked_element and stay valid for the same element until the page navigates or re-renders it.',
   'click/type/press_key send real (trusted) input events and report navigation or new tabs.',
   'For site data prefer network_requests/network_request (what the page already loaded) or page_fetch (fetch inside the page with its cookies) over scraping HTML.',
+  'Site memory: Космолёт records every site\'s API endpoints as you and the user browse (site_api_catalog -> site_api_endpoint: params, JSON schemas, needed headers, which button triggers it) and keeps your own notes per site (site_notes / site_note_add, allowed even in read mode). Before working on a site, check its catalog and notes first; when an endpoint returns the data or performs the action you need, prefer a direct page_fetch over clicking through the UI (use clicks when the flow needs the UI, e.g. captchas or multi-step forms). Save durable findings (working endpoints, quirks, where things are) with site_note_add.',
+  'request_initiator and recent_actions tell which user/Claude action and which JS code caused a request.',
   'picked_element returns the element the user pointed at with the picker (Ctrl+Shift+E).',
   'Containers isolate logins: each has its own cookies, storage and cache. To work in several accounts of one site (e.g. different seller cabinets of one marketplace) at once, use one container per account: tab_open with isolated=true (new container) or container=<id>; containers_list shows them, container_create makes a lasting one. Tabs opened by a page stay in its container.',
   'The user sets the access mode: read = only reading tools, full = everything.',
@@ -33,6 +35,15 @@ function fmtTime(ts) {
   const p = (x, n = 2) => String(x).padStart(n, '0');
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
+function ago(ts) {
+  if (!ts) return '—';
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
+}
+function statusText(st) { return Object.entries(st || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k}×${n}`).join(' '); }
 function truncNote(text, max, what) {
   if (text.length <= max) return text;
   return text.slice(0, max) + `\n…[${what || 'truncated'}: showing ${max} of ${text.length} chars; raise maxChars to see more]`;
@@ -187,6 +198,32 @@ function createTools(ctx, deps) {
     } catch (_) { /* не критично */ }
     return note;
   }
+  // ---------- знания о сайтах (site-intel) ----------
+  const SI = () => {
+    if (!ctx.siteIntel) throw new Error('site knowledge is not available in this build (site-intel feature missing)');
+    return ctx.siteIntel;
+  };
+  function siteHint(url) { try { return ctx.siteIntel ? ctx.siteIntel.hint(url) : ''; } catch (_) { return ''; } }
+  // Действие Claude — до отправки ввода, чтобы запросы привязались к нему (подпись — имя из описания элемента).
+  function noteAct(tab, label, kind) {
+    try {
+      if (!ctx.siteIntel) return;
+      const m = /"([^"]{1,80})"/.exec(String(label || ''));
+      ctx.siteIntel.noteAction(tab.id, m ? m[1] : String(label || '').replace(/^\[e\d+\]\s*/, ''), 'claude', { kind });
+    } catch (_) { /* не мешаем действию */ }
+  }
+  function siteArg(args) {
+    const o = {};
+    if (args.site) o.site = args.site;
+    else if (args.tabId != null) { A.getTab(args.tabId); o.tabId = args.tabId; }
+    return SI().resolveSite(o);
+  }
+  function catalogLine(it) {
+    const by = it.actions && it.actions.length ? `, by: ${it.actions.slice(0, 2).map((a) => `«${a.label}»${a.n > 1 ? ' ×' + a.n : ''}${a.claude && !a.user ? ' (claude)' : ''}`).join(', ')}` : '';
+    const st = Object.keys(it.status || {}).filter((k) => !/^2/.test(k));
+    return `#${it.index} ${it.method} ${it.host} ${clip(readableUrl(it.path + it.query), 260)} ×${it.count}, last ${ago(it.last)}${it.auth ? ', auth: ' + it.auth : ''}${st.length ? ', also status ' + st.join('/') : ''}${by}`;
+  }
+
   function sessionFor(args) {
     let containerId = 'main';
     if (args.tabId != null) containerId = A.getTab(args.tabId).info.containerId;
@@ -214,7 +251,17 @@ function createTools(ctx, deps) {
         async run() {
           const list = ctx.tabs.list();
           const lines = list.map(tabLine);
-          return `${list.length} tabs (* = active, ids are stable while the tab lives):\n${lines.join('\n')}`;
+          const hints = [];
+          const seen = new Set();
+          for (const t of list) {
+            let site = '';
+            try { site = ctx.siteIntel ? ctx.siteIntel.siteForUrl(t.url) : ''; } catch (_) { site = ''; }
+            if (!site || seen.has(site)) continue;
+            seen.add(site);
+            const h = siteHint(t.url);
+            if (h) hints.push(h);
+          }
+          return `${list.length} tabs (* = active, ids are stable while the tab lives):\n${lines.join('\n')}${hints.length ? '\n' + hints.join('\n') : ''}`;
         },
       },
       {
@@ -260,6 +307,8 @@ function createTools(ctx, deps) {
               if (p.selection) lines.push(`Selected text: ${clip(p.selection.replace(/\s+/g, ' '), 300)}`);
             } catch (e) { lines.push(`(page details unavailable: ${e.message})`); }
           }
+          const hint = siteHint(i.url);
+          if (hint) lines.push(hint);
           return lines.join('\n');
         },
       },
@@ -277,7 +326,8 @@ function createTools(ctx, deps) {
         async run(args, call) {
           const tab = await webTab(args, call);
           const text = await A.lib(tab, 'snapshot', { mode: args.mode, visibleOnly: args.visibleOnly, selector: args.selector, maxChars: args.maxChars || 20000 }, 20000);
-          return `Tab [${tab.id}]\n${text}`;
+          const hint = siteHint(tab.wc.getURL());
+          return `Tab [${tab.id}]${hint ? '\n' + hint : ''}\n${text}`;
         },
       },
       {
@@ -458,6 +508,174 @@ function createTools(ctx, deps) {
         },
       },
 
+      // ===== знания о сайтах (site-intel) =====
+      {
+        name: 'site_api_catalog', access: READ,
+        description: 'API endpoints this browser has seen the site call (collected automatically across sessions, all tabs and containers): method, host, path template ({id}, {uuid}, {hash}, {token} replace ids), query template, call count, auth kind, and which button/action triggers it. Default: the site of the active tab. Then use site_api_endpoint with #index for params, schemas and a ready page_fetch call. Example: {} or {"site": "wildberries.ru", "filter": "search", "method": "GET"}',
+        input: {
+          site: z.string().optional().describe('Site (registrable domain or any URL/host of it), e.g. "wildberries.ru"'),
+          tabId,
+          filter: z.string().optional().describe('Substring of path, host, param name or action label'),
+          method: z.string().optional().describe('Only this HTTP method'),
+          limit: z.number().optional().describe('Max endpoints (default 60)'),
+        },
+        annotations: { readOnlyHint: true },
+        async run(args, call) {
+          if (args.tabId != null) call.tab(A.getTab(args.tabId));
+          const site = siteArg(args);
+          const c = SI().catalog(site, { filter: args.filter, method: args.method, limit: Math.max(1, Math.min(300, args.limit || 60)) });
+          const off = SI().enabled() ? '' : '\nNote: collecting is turned off in the browser settings (Developer tools → «Собирать каталог API сайтов»).';
+          if (!c.total) return `No API endpoints recorded for ${site} yet. They appear as the page makes XHR/fetch calls — browse or act on the site, then call again.${c.notes ? ` There are ${c.notes} note(s): site_notes.` : ''}${off}`;
+          const head = `${site}: ${c.total} endpoint(s)${args.filter || args.method ? `, ${c.matched} match` : ''}${c.notes ? `, ${c.notes} note(s) (site_notes)` : ''}. Sorted by calls; #index works with site_api_endpoint.`;
+          return [head, ...c.items.map(catalogLine), c.matched > c.items.length ? `…and ${c.matched - c.items.length} more (raise limit or filter)` : null].filter(Boolean).join('\n') + off;
+        },
+      },
+      {
+        name: 'site_api_endpoint', access: READ,
+        description: 'Full card of one recorded endpoint: query params with sample values (secrets masked), request and response JSON schemas (TypeScript-like, keys and types only), notable request headers (names only), auth kind, triggering actions, JS initiators, the latest captured request id (if still in the buffer) and a ready page_fetch call. Example: {"index": 1} or {"site": "wildberries.ru", "key": "GET www.wildberries.ru/__internal/u-search/exactmatch/ru/common/v18/search"}',
+        input: {
+          site: z.string().optional().describe('Site; default: the active tab\'s site'),
+          tabId,
+          key: z.string().optional().describe('Endpoint key "METHOD host/path" (or a unique substring)'),
+          index: z.number().optional().describe('#index from site_api_catalog'),
+        },
+        annotations: { readOnlyHint: true },
+        async run(args, call) {
+          if (args.tabId != null) call.tab(A.getTab(args.tabId));
+          const site = siteArg(args);
+          if (args.key == null && args.index == null) throw new Error('key or index is required (see site_api_catalog)');
+          const d = SI().endpoint(site, args.key != null ? args.key : args.index);
+          if (!d) throw new Error(`no such endpoint for ${site}; list them with site_api_catalog`);
+          const out = [
+            `#${d.index} ${d.method} ${d.host}${d.path}`,
+            `Key: ${d.key}`,
+            `Seen ×${d.count} (first ${new Date(d.first).toISOString().slice(0, 16).replace('T', ' ')}, last ${ago(d.last)}); status ${statusText(d.status)}; ${Object.keys(d.mime).join(', ') || 'no mime'}; ${Object.keys(d.types).join('/')}`,
+          ];
+          if (d.pages.length) out.push(`Called from pages: ${d.pages.slice(0, 5).map((p) => p.page).join(', ')}`);
+          out.push(`Auth: ${d.auth || 'none seen'}`);
+          if (d.headers.length) out.push(`Notable request headers (names only, values are never stored): ${d.headers.map((h) => h.name).join(', ')}`);
+          if (d.params.length) {
+            out.push('Query params:');
+            for (const p of d.params) {
+              const ex = p.examples.map((x) => JSON.stringify(x)).join(', ');
+              out.push(`  ${p.name}${p.optional ? '?' : ''}: ${p.type || 'string'}${p.masked ? ', secret (masked)' : ''}, ${p.varies ? 'varies' : 'constant'}${ex ? ', e.g. ' + ex : ''}`);
+            }
+          } else out.push('Query params: none');
+          if (d.reqType) out.push(`Request content-type: ${d.reqType}`);
+          if (d.reqSchema) out.push(`Request body schema (${d.reqSamples} sample(s)):\n${d.reqSchema}`);
+          out.push(d.resSchema ? `Response schema (${d.resSamples} sample(s)):\n${d.resSchema}` : 'Response schema: not sampled yet (only JSON ≤ 1 MB; first 3 responses, then once a day).');
+          if (d.actions.length) out.push(`Triggered by actions: ${d.actions.map((a) => `«${a.label}» ×${a.n}${a.claude ? ` (${a.user ? a.user + ' user, ' : ''}${a.claude} claude)` : ''}`).join(', ')}`);
+          else out.push('Triggered by actions: none seen (fired on page load or by timers)');
+          if (d.initiators.length) out.push(`JS initiators: ${d.initiators.slice(0, 4).map((x) => `${x.where} ×${x.n}`).join('; ')}`);
+          const hdrs = {};
+          if (d.reqType && d.method !== 'GET') hdrs['content-type'] = d.reqType;
+          for (const h of d.neededHeaders) hdrs[h] = `<${h} from network_request>`;
+          const pf = { url: d.exampleUrl, method: d.method };
+          if (Object.keys(hdrs).length) pf.headers = hdrs;
+          if (d.bodySkeleton != null && d.method !== 'GET') pf.body = JSON.stringify(d.bodySkeleton);
+          if (d.sample) {
+            pf.tabId = d.sample.tab;
+            out.push(`Latest captured request: network_request {"tabId": ${d.sample.tab}, "id": "${d.sample.id}"} — real header values and body.`);
+          } else out.push('Latest captured request: no longer in the buffer — repeat the action (or reload) to capture a fresh one.');
+          out.push(`Call it directly (needs access full; the page's cookies are sent automatically):\npage_fetch ${JSON.stringify(pf)}`);
+          if (d.neededHeaders.length) out.push(`Copy the values of ${d.neededHeaders.join(', ')} from network_request of a recent call; they are not stored here.`);
+          return out.join('\n');
+        },
+      },
+      {
+        name: 'request_initiator', access: READ,
+        description: 'What caused a captured request: the user or Claude action just before it (click/submit/Enter/select with its label and selector, within 2 s in the same tab) and the JS call stack (up to 5 frames). Example: {"id": "1234.56"}',
+        input: {
+          tabId,
+          id: z.union([z.string(), z.number()]).describe('Request id from network_requests (without #)'),
+        },
+        annotations: { readOnlyHint: true },
+        async run(args, call) {
+          const tab = call.tab(A.getTab(args.tabId));
+          const r = SI().initiator(tab.id, args.id);
+          if (!r) throw new Error(`request #${args.id} not found in tab [${tab.id}] (the log may have been cleared); list them with network_requests`);
+          const out = [`#${r.id} ${r.method} ${r.status || '—'} ${r.type} ${clip(readableUrl(r.url), 300)}`, `Started ${fmtTime(r.ts)}`];
+          if (r.action) {
+            const a = r.action;
+            out.push(`Action: ${a.source} ${a.kind} «${a.label}»${a.claudeLabel ? ` (Claude: ${a.claudeLabel})` : ''}${a.tag ? ` <${a.tag}${a.role ? ' role=' + a.role : ''}>` : ''}${a.sel ? ' ' + a.sel : ''}, ${Math.max(0, r.ts - a.ts)} ms before the request, on ${a.page}`);
+          } else out.push('Action: none within 2 s before it (page load, timer, scroll or an untracked event)');
+          const i = r.initiator || {};
+          out.push(`Initiator type: ${i.type || 'unknown'}`);
+          if (Array.isArray(i.stack) && i.stack.length) {
+            out.push('JS stack (top first):');
+            for (const f of i.stack) out.push(`  ${f.async ? '[' + f.async + '] ' : ''}${f.fn || '(anonymous)'} @ ${clip(f.url, 200)}:${f.line}${f.col ? ':' + f.col : ''}`);
+          } else if (i.url) out.push(`Source: ${clip(i.url, 300)}${i.line ? ':' + i.line : ''}`);
+          return out.join('\n');
+        },
+      },
+      {
+        name: 'recent_actions', access: READ,
+        description: 'Recent user and Claude actions in a tab (click, form submit, Enter in a field, select change) with the API requests each one triggered within 2 s. Example: {"limit": 10}',
+        input: {
+          tabId,
+          limit: z.number().optional().describe('Max actions (default 15, max 50)'),
+        },
+        annotations: { readOnlyHint: true },
+        async run(args, call) {
+          const tab = call.tab(A.getTab(args.tabId));
+          const list = SI().recentActions(tab.id, args.limit || 15);
+          if (!list.length) return `No actions recorded in tab [${tab.id}] yet (only clicks, submits, Enter in fields and select changes on http(s) pages are tracked).`;
+          const out = [`${list.length} recent action(s) in tab [${tab.id}], oldest first:`];
+          for (const a of list) {
+            out.push(`${fmtTime(a.ts)} ${a.source} ${a.kind} «${a.label}»${a.sel ? ' ' + a.sel : ''} on ${a.page}${a.requests.length ? ` → ${a.requests.length} request(s):` : ' → no API requests'}`);
+            for (const r of a.requests.slice(0, 8)) out.push(`    #${r.id} ${r.method} ${r.status} ${r.url}`);
+            if (a.requests.length > 8) out.push(`    …${a.requests.length - 8} more`);
+          }
+          return out.join('\n');
+        },
+      },
+      {
+        name: 'site_notes', access: READ,
+        description: 'Your saved notes about a site (your memory between sessions; the user can add and edit them too). Default: the active tab\'s site. Example: {} or {"site": "ozon.ru"}',
+        input: { site: z.string().optional().describe('Site; default: the active tab\'s site'), tabId },
+        annotations: { readOnlyHint: true },
+        async run(args, call) {
+          if (args.tabId != null) call.tab(A.getTab(args.tabId));
+          const site = siteArg(args);
+          const list = SI().notes(site);
+          if (!list.length) return `No notes for ${site}. Save useful findings with site_note_add.`;
+          return `${list.length} note(s) for ${site}:\n` + list.map((n) => `[${n.id}] ${n.author}${n.editedBy && n.editedBy !== n.author ? ' (edited by ' + n.editedBy + ')' : ''}, ${new Date(n.updated).toISOString().slice(0, 16).replace('T', ' ')}${n.tags.length ? ', tags: ' + n.tags.join(', ') : ''}\n${n.text}`).join('\n\n');
+        },
+      },
+      {
+        name: 'site_note_add', access: READ,
+        description: 'Save a note about a site for future sessions (working endpoints, required headers, quirks, where things are). Allowed in read mode: it is your own memory and does not change the browser or the site. Max 2000 chars. Example: {"text": "Search: GET /__internal/u-search/... needs x-wbaas-token; page=N for pagination", "tags": ["api", "search"]}',
+        input: {
+          site: z.string().optional().describe('Site; default: the active tab\'s site'),
+          tabId,
+          text: z.string().describe('Note text (≤ 2000 chars)'),
+          tags: z.array(z.string()).optional().describe('Short tags'),
+        },
+        async run(args, call) {
+          if (args.tabId != null) call.tab(A.getTab(args.tabId));
+          const site = siteArg(args);
+          call.logArgs = Object.assign({}, args, { text: clip(args.text, 80) });
+          const n = SI().addNote(site, { text: args.text, tags: args.tags, author: 'claude' });
+          return `Saved note [${n.id}] for ${site}.`;
+        },
+      },
+      {
+        name: 'site_note_remove', access: READ,
+        description: 'Delete one of the site notes by id (from site_notes). Allowed in read mode: it only edits your own memory. Example: {"id": "nmabc123"}',
+        input: {
+          site: z.string().optional().describe('Site; default: the active tab\'s site'),
+          tabId,
+          id: z.string().describe('Note id'),
+        },
+        annotations: { destructiveHint: true },
+        async run(args, call) {
+          if (args.tabId != null) call.tab(A.getTab(args.tabId));
+          const site = siteArg(args);
+          const n = SI().removeNote(site, args.id);
+          return `Removed note [${n.id}] from ${site}.`;
+        },
+      },
+
       // ===== действия =====
       {
         name: 'tab_open', access: FULL,
@@ -592,6 +810,7 @@ function createTools(ctx, deps) {
               && (to.pathname + to.search) !== (cur.pathname + cur.search) && (!args.button || args.button === 'left') && !(args.modifiers || []).length;
           } catch (_) { spaLink = false; }
           const nav = A.watchNav(tab);
+          if (!args.button || args.button === 'left') noteAct(tab, loc.desc, 'click');
           A.mouse(tab, ...winPt(loc), { button: args.button, clickCount: args.clickCount, modifiers: mods(args.modifiers) });
           const r = await nav.settle({ quiet: 300, extra: spaLink ? Math.min(waitMs, 3500) : 700, timeout: waitMs });
           if (spaLink && !r.navigated && !r.newTabs.length && r.lines.length === 1 && /^No navigation/.test(r.lines[0])) {
@@ -633,6 +852,7 @@ function createTools(ctx, deps) {
             A.key(tab, 'Control+A');
             await A.sleep(30);
           }
+          if (!args.submit) noteAct(tab, 'type into ' + desc, 'type');
           if (text) await tab.wc.insertText(text);
           else if (args.clear) A.key(tab, 'Delete');
           await A.sleep(60);
@@ -642,6 +862,7 @@ function createTools(ctx, deps) {
           }
           if (args.submit) {
             const nav = A.watchNav(tab);
+            noteAct(tab, desc, 'enter');
             A.key(tab, 'Enter');
             const r = await nav.settle({ quiet: 400, extra: 1200, timeout: 15000 });
             lines.push('Pressed Enter.', ...r.lines);
@@ -666,6 +887,7 @@ function createTools(ctx, deps) {
           const n = Math.max(1, Math.min(50, args.repeat || 1));
           const nav = A.watchNav(tab);
           const done = [];
+          noteAct(tab, 'press ' + clip(raw.trim() || 'Space', 40), /(^|\s|\+)Enter(\s|$)/i.test(raw) ? 'enter' : 'key');
           for (let i = 0; i < n; i++) {
             for (const k of parsed) { done.push(A.key(tab, k)); await A.sleep(25); }
           }
@@ -735,6 +957,7 @@ function createTools(ctx, deps) {
         },
         async run(args, call) {
           const tab = await webTab(args, call);
+          noteAct(tab, 'select ' + clip(args.value != null ? args.value : (args.values || []).join(', ') || ('#' + args.index), 40), 'change');
           const r = await A.lib(tab, 'selectOption', args);
           return `Selected ${r.selected.map((s) => JSON.stringify(s)).join(', ')} in ${r.desc}.`;
         },

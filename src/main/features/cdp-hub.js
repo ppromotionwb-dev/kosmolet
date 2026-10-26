@@ -31,6 +31,7 @@ const FETCH_BODY_LIMIT = 5 * 1024 * 1024;
 const FETCH_REQ_LIMIT = 10 * 1024 * 1024;
 const FETCH_WORLD = 1717;                      // свой изолированный мир для pageFetch (999 — preload)
 const BATCH_MS = 150;
+const INITIATOR_FRAMES = 5;                    // кадров стека в initiator.stack
 const API_TYPES = new Set(C.API_TYPES);
 
 function now() { return Date.now(); }
@@ -312,6 +313,15 @@ function createHub(ctx) {
     else if (i.stack && i.stack.parent && i.stack.parent.callFrames && i.stack.parent.callFrames.length) frame = i.stack.parent.callFrames[0];
     if (frame) { out.url = frame.url; out.line = (frame.lineNumber || 0) + 1; out.fn = frame.functionName || ''; }
     else if (i.url) { out.url = i.url; if (i.lineNumber != null) out.line = i.lineNumber + 1; }
+    // до 5 верхних кадров стека (с асинхронными родителями) — для site-intel и request_initiator
+    const stack = [];
+    for (let s = i.stack, hops = 0; s && stack.length < INITIATOR_FRAMES && hops < 8; s = s.parent, hops++) {
+      for (const f of Array.isArray(s.callFrames) ? s.callFrames : []) {
+        if (stack.length >= INITIATOR_FRAMES) break;
+        stack.push({ url: String(f.url || '').slice(0, 500), line: (f.lineNumber || 0) + 1, col: (f.columnNumber || 0) + 1, fn: String(f.functionName || '').slice(0, 120), async: hops ? String(s.description || 'async') : undefined });
+      }
+    }
+    if (stack.length) out.stack = stack;
     return out;
   }
 

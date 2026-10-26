@@ -56,12 +56,14 @@ KOSMOLET/
         claude-terminal.js     — claude-terminal: node-pty, запуск claude, подключение
         platform.js            — platform: расширения, блокировщик, контейнеры, UA
         tools-pack.js          — tools-pack: сниппеты, рентген
+        site-intel.js (+ site-intel/shape.js) — site-intel: каталог API сайтов, действия, заметки
     preload/
       ui-preload.js            — core: preload для интерфейса (chrome/panel/overlay)
       tab/                     — части tab-preload (порядок по имени файла)
         00-core.js             — core
         20-site-theme.js       — themes
         30-picker.js           — claude-bridge
+        50-site-intel.js       — site-intel
     renderer/
       shared/
         tokens.css             — core (переменные), themes (пресеты)
@@ -227,6 +229,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | theme | Тема сайта | themes |
 | snippets | Сниппеты | tools-pack |
 | xray | Рентген | tools-pack |
+| site | Сайт | site-intel |
 
 **Внутренние страницы**: `kosmo://newtab/`, `kosmo://settings/`, `kosmo://history/`, `kosmo://downloads/`, `kosmo://extensions/`. Отдаются из `renderer/pages/<host>/` для всех сессий-контейнеров; `kosmo://ui/...` — только для UI-сессии. Ответы с CSP `default-src 'self' kosmo:; img-src * data: blob:; style-src 'self' 'unsafe-inline'` и `frame-ancestors 'none'`. Страница настроек — оболочка core, разделы `settings/sections/<id>.js` регистрируются `KSettings.section({ id, title, icon, order, render(el, api) })`, api: `get(path)`, `set(path, v)`, `on(cb)`, `invoke`.
 
@@ -337,7 +340,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 
 ## Приложение: фактические API и каналы фич
 
-Сводка на 22.10.2026 по `docs/features-reports.md`, отчётам починщиков и коду. При расхождении верен код. Порядок init фич (`main.js`): `platform, themes, cdp-hub, devtools, ux-chrome, claude-bridge, claude-terminal, tools-pack`.
+Сводка на 22.10.2026 по `docs/features-reports.md`, отчётам починщиков и коду (site-intel — 26.10.2026). При расхождении верен код. Порядок init фич (`main.js`): `platform, themes, cdp-hub, devtools, site-intel, ux-chrome, claude-bridge, claude-terminal, tools-pack`.
 
 ### А1. API фич в ctx
 
@@ -354,6 +357,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | `ctx.adblock` | platform | `isEnabledFor(url)`, `blockedCount(tabId)`, `status()`, `update()` |
 | `ctx.extensions` | platform | `list()`, `install(id, containerId)`, `remove(id)`, `instance(containerId)` |
 | `ctx.platform` | platform | `{modal, adblock, extensions, permissions, containers}` — внутренние модули (`permissions.queue()`, `respond`, `revoke`, `listSaved`, `cancelTab`) |
+| `ctx.siteIntel` | site-intel | `enabled()`, `siteOf(hostOrUrl)` (регистрируемый домен, tldts с частными суффиксами), `siteForUrl(url)`, `siteForTab(tabId)`, `resolveSite({site?, tabId?})`, `noteAction(tabId, label, source: 'claude'\|'user', {kind})`, `catalog(site, {filter, method, limit})` → `{total, matched, items: [{index, key, method, host, path, query, count, last, auth, actions}]}`, `endpoint(site, key \| index)` → карточка (`params`, `reqSchema`/`resSchema` TS-подобным текстом, `headers`, `neededHeaders`, `auth`, `actions`, `initiators`, `pages`, `sample` — живой `{tab, id}` в буфере cdp, `exampleUrl`, `fetchTemplate`, `bodySkeleton`), `initiator(tabId, requestId)`, `recentActions(tabId, limit)`, `notes(site)`, `addNote(site, {text, tags, author})`, `updateNote`, `removeNote`, `forget(site)`, `sites()`, `clearAll()`, `counts(site)`, `hint(url)` (строка «Site knowledge…» для MCP), `stats()`, `flush()` |
 | `ctx.toolsPack` | tools-pack | `snippets()`, `builtins()`, `runSnippet(tabId, code, world)` → `{ok, ms, logs, result, error, world, url}`, `xray(tabId)` → `{sections, notes, …}`, `matchUrl(pattern, url)` |
 
 **Точки расширения ядра, добавленные фичами и починщиками:**
@@ -364,7 +368,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - `ctx.permissions.setHandler((kind, info) => bool | undefined | Promise)`, `ctx.uiPreload.addModule(path)` (только в init), `ctx.sessions.addVendor(pkg)`, `ctx.settings.addDefaults(obj, {enums})`, `ctx.settings.peek(path)`, `ctx.contextMenu.build(...)` (для проверок).
 - Интерфейс: `KChrome.toggleOverlay(type, data, anchor, opts)`, `KUI.kbd(combo)`, `KUI.setToastHandler(fn)`, в api `KPanel` — `siteHeader({icon, title, sub, subTitle, actions})`, `KOverlay.ui.header/menu`, тип overlay `toast`.
 
-**Ветки настроек от фич:** `claude.shell` (powershell, cmd, bash), `devtools.preserveLog`, `devtools.console`, `siteThemes.colorScheme` (system, dark, light), `siteThemes.rev` (миграции; rev 2 — wildberries.ru на движке `filter`). Значения `claude.claudeCommand` (`claude…` без аргументов или существующий абсолютный .exe/.cmd/.bat/.com), `claude.inboxDir`, `claude.terminalCwd`, `downloads.dir` (`''` или абсолютная папка) проверяются при записи.
+**Ветки настроек от фич:** `siteIntel` (`enabled: true`, `exclude: []` — сайты/хосты без сбора, поддомены входят), `claude.shell` (powershell, cmd, bash), `devtools.preserveLog`, `devtools.console`, `siteThemes.colorScheme` (system, dark, light), `siteThemes.rev` (миграции; rev 2 — wildberries.ru на движке `filter`). Значения `claude.claudeCommand` (`claude…` без аргументов или существующий абсолютный .exe/.cmd/.bat/.com), `claude.inboxDir`, `claude.terminalCwd`, `downloads.dir` (`''` или абсолютная папка) проверяются при записи.
 
 ### А2. Каналы IPC по фичам
 
@@ -378,6 +382,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | claude-terminal | `kosmo:term.*` (create, list, write, resize, kill, restart, replay `{withSeq}`, info, clipboard, pickCwd; `focusState` — через send) | `kosmo:term.data`, `kosmo:term.exit`, `kosmo:term.sessions`, `kosmo:term.reset`, `kosmo:term.show` |
 | platform | `kosmo:ext.*` (list, state, reload, remove, options, loadUnpacked, openFolder, openStore), `kosmo:adblock.*` (state, setEnabled, setSite, update), `kosmo:perm.*` (list, respond, revoke), `kosmo:containers.*` (stats, clearData, remove, chipMenu, newTab), `kosmo:privacy.*` (clearCache, clearCookies, uaInfo), `kosmo:platform.modalRespond` | `kosmo:adblock.counts`, `kosmo:adblock.status`, `kosmo:ext.changed`, `kosmo:perm.queue` |
 | tools-pack | `kosmo:snippets.*` (list, save, remove, run, runPicked, takeLast, autoLog, autoResult), `kosmo:xray.*` (run, toClaude), `kosmo:tools.*` (metrics, discardTab, paths, openFolder — открыты и внутренним страницам) | `kosmo:snippets.changed`, `kosmo:snippets.auto`, `kosmo:snippets.ran` |
+| site-intel | `kosmo:siteIntel.*` (summary `{tabId?}` → `{site, enabled, excluded, capture, total, items, notes}`, endpoint `{site, key}`, noteAdd/noteUpdate/noteRemove (автор `user`), forget, sites, clearAll, actions) — для `ui` и `kosmo://settings`; из вкладок `kosmo-tab:intel.action {kind: click\|submit\|enter\|change, label ≤ 60, tag, role, sel ≤ 120}` (недоверенные: проверка, обрезка, ≤ 5/с на вкладку, только главный фрейм того же origin) | `kosmo:siteIntel.changed {site, forgotten?}` (не чаще раза в секунду на сайт) |
 
 ### А3. Изолированные миры
 
@@ -402,6 +407,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | `20-site-theme.js` | themes | тёмная тема сайта (движки dynamic и filter), свой CSS, защита от белой вспышки |
 | `30-picker.js` | claude-bridge | пикер «Показать Claude элемент» (рамка в закрытом shadow root) |
 | `41-tools-favicon` (addPart) | tools-pack | знак Космолёта как значок внутренних страниц |
+| `50-site-intel.js` | site-intel | только главный фрейм http(s): доверенные (`isTrusted`) click по интерактивному элементу, submit формы (без дубля сразу после клика/Enter), Enter в поле, change у select → `kosmo-tab:intel.action`; подпись — доступное имя или текст (значения полей не отправляются, у select — текст пункта), короткий селектор, не чаще 5/с |
 
 Отдельные frame-preload сессий (не части tab-preload): `kosmo-adblock-cosmetic` — своя копия косметики ghostery (`features/platform/adblock-cosmetic-preload.js`, без `unload`), и preload-скрипты `electron-chrome-extensions` и Web Store. В ui-preload фичи добавляют модули через `ctx.uiPreload.addModule` (platform: `ui-preload-actions.js` для `<browser-action-list>`).
 
@@ -414,6 +420,7 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 | `claude-activity.json` (500 записей), `gen/claude-mcp.json` (адрес и токен для `claude --mcp-config` и `mcp-call.mjs --profile`) | claude-bridge |
 | `adblock-engine.bin` (обновление раз в 7 дней), `extensions/`, `extensions-unpacked.json`, `containers-purge.json` | platform |
 | `snippets.json` | tools-pack |
+| `site-intel/<site>.json` — по файлу на сайт: `{v, site, created, updated, endpoints: {"METHOD host/path": {...}}, notes: []}`; атомарная запись (tmp + rename) с дебаунсом 1,5 с, синхронный сброс при выходе, в памяти до 16 сайтов | site-intel |
 | `main-stdout.log`, `main-stderr.log` (только при запуске через `start-dev.ps1`) | dev |
 
 Вне userData: inbox Claude — `settings.claude.inboxDir` или `Документы\Космолёт\claude-inbox`; загрузки — `settings.downloads.dir` или системная папка «Загрузки». Cookies и кэш контейнеров — `Partitions/c-<id>` (Chromium).
@@ -423,3 +430,15 @@ Tab = { id, info /*TabInfo*/, view /*WebContentsView|null*/, wc /*webContents|nu
 - Флаги: `--dev`, `--profile`, `--dev-port`, `--cdp-port`, `--mcp-port`, `--no-restore`, `--open`; только в dev — `--offscreen`, `--ui-root`. В dev отключена окклюзия окон (`CalculateNativeWinOcclusion`), лог main копится и пишется асинхронно (остаток — при выходе), есть команда «Исследовать интерфейс» `Ctrl+Alt+Shift+I`.
 - `tools/start-dev.ps1 … [-OnScreen] [-NoRestore] [-Open <url>] [-UiRoot <папка>]`; `tools/dev.mjs --port <n> eval "<код>" | eval --file <путь> | shot [файл] | logs [n] | quit | health`; `tools/smoke.mjs <dev> <cdp>`; `tools/mcp-call.mjs --profile <p>` (или `--port`, `--token`) `list | call <tool> '<json>'`.
 - Особенности проверок: `render-process-gone` после `forcefullyCrashRenderer` на этой машине приходит через 0,4–19 с (smoke ждёт до 25 с); тест `toggleOverlay` в smoke чувствителен к загрузке CPU (паузы 100–300 мс).
+
+### А7. Знания о сайтах (site-intel)
+
+- **Источник:** `ctx.cdp.on('entry')` (завершённые запросы всех вкладок и контейнеров). Берутся XHR/Fetch (и Other с JSON) с ответом JSON/текст (или 204), без трекеров (google-analytics, mc.yandex и т. п.), не из исключений. Обработка отложена на 350 мс (ждём IPC о действии) и идёт пачками вне обработчика CDP.
+- **Сайт** — регистрируемый домен страницы вкладки (не запроса): запросы www.wildberries.ru к static-basket-01.wbbasket.ru попадают в каталог wildberries.ru. **Ключ эндпоинта** — `METHOD host/шаблон-пути`; сегменты-числа → `{id}`, UUID → `{uuid}`, hex ≥ 12 → `{hash}`, длинные токены (≥ 20 символов, буквы+цифры одним куском, JWT) → `{token}`.
+- **По эндпоинту:** query-параметры (имя, тип, до 3 примеров ≤ 40 символов, «меняется»; параметры-секреты и значения-токены маскируются `‹hidden N chars›`), content-type запроса, схемы тела запроса и ответа (ключи и типы, массивы — форма элемента, глубина ≤ 6, ≤ 80 ключей, словари с id-ключами → `Record<string, T>`, необязательные ключи отмечаются `?`), счётчики статусов/mime/типов, `count`, `first/last`, страницы (шаблоны, до 8), 5 последних `{tab, id}` образцов, имена «заметных» заголовков (не стандартные, без `sec-*` и псевдозаголовков), авторизация (cookie / bearer / basic / заголовки-токены — только факт и имена), действия (подпись → `{n, user, claude}`), верхний кадр JS-инициатора. Лимиты: 300 эндпоинтов на сайт (вытесняется давно не виденный), 200 заметок, заметка ≤ 2000 символов.
+- **Тела ответов** — лениво через `ctx.cdp.body`: JSON (или text/plain, начинающийся с `{`/`[`), ≤ 1 МБ, первые 3 образца на эндпоинт, затем не чаще раза в сутки, очередь ≤ 40, не чаще 4 в секунду. Значения из тел не сохраняются.
+- **Действия:** часть preload `50-site-intel.js` (пользователь) и `noteAction(..., 'claude')` из инструментов моста click / type / press_key / select_option (до отправки ввода). Настоящий ввод Claude страница тоже видит — событие страницы в течение 1,5 с после действия Claude сливается с ним (подпись берётся со страницы). Запросы, начатые в течение 2 с после действия (допуск −300 мс) в той же вкладке, привязываются к последнему такому действию. Журнал вкладки — 50 действий по 40 запросов, только в памяти.
+- **Правка ядра (cdp-hub):** `initiatorOf` дополнительно кладёт `initiator.stack` — до 5 верхних кадров `{url, line, col, fn, async?}` с асинхронными родителями; прежние поля `type/url/line/fn` без изменений.
+- **MCP** (bridge/tools.js, все READ): `site_api_catalog {site?|tabId?, filter?, method?, limit?}`, `site_api_endpoint {site?, key|index}` (с готовым вызовом `page_fetch` и id живого образца для `network_request`), `request_initiator {id, tabId?}`, `recent_actions {tabId?, limit?}`, `site_notes {site?}`, `site_note_add {site?, text, tags?}`, `site_note_remove {site?, id}` (запись заметок разрешена в режиме read — это память агента). `tabs_list`, `page_info`, `snapshot` добавляют строку `Site knowledge (<site>): N API endpoints, M notes — see site_api_catalog / site_notes`. INSTRUCTIONS сервера: сначала каталог и заметки, прямые вызовы API предпочтительнее кликов.
+- **Интерфейс:** инструмент панели `site` (`panel/tools/site.js/.css`), группа «Знания о сайтах» в разделе настроек devtools (`settings/sections/site-intel.js/.css`, вызывается из `sections/devtools.js` через `window.KSiteIntelSettings.render`).
+- **Проверка:** `node tools/site-intel-test.mjs <devPort> <profile>` (36 проверок: шаблоны, схемы, маскировка, привязка к кликам MCP и `sendInputEvent`, все MCP-инструменты, режим read, недоверенный IPC, вкл/выкл, исключения), после перезапуска — с `--persist`.
